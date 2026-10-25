@@ -20,6 +20,19 @@ Swoosh is a launcher, not an emulator or converter. It does not include games, k
 
 The release is locally ad-hoc signed and is not notarized with an Apple Developer ID. macOS may require approval in System Settings → Privacy & Security before opening it.
 
+## Adding games with NXnative
+
+[NXnative](https://github.com/seedds/nxnative) is a separate open-source project for running supported Switch games natively on Apple silicon, with graphics translated to Metal. It provides the conversion and runtime; Swoosh provides the controller-driven library and launches the resulting macOS app.
+
+Use only game data and keys you are legally entitled to obtain and use. Check the rules for backups, extraction and copy-protection circumvention in your jurisdiction; owning a game does not automatically make every extraction or conversion step lawful. For a U.S. example, see the [Copyright Office’s Section 1201 guidance](https://www.copyright.gov/1201/). Swoosh supplies no game files or keys, and converted game bundles must not be distributed without the necessary rights.
+
+1. Start with your own lawfully obtained game backup and any required keys. Follow [NXnative’s setup instructions](https://github.com/seedds/nxnative/blob/main/README.md) and check its [per-game compatibility notes](https://github.com/seedds/nxnative/blob/main/dm/games/README.md).
+2. Follow the [NXnative Mac build instructions](https://github.com/seedds/nxnative/blob/main/docs/development.md#a-mac-only-build-for-development), using its `--platform mac` target. Test the game directly before adding it to Swoosh; support depends on the game, its version and the runtime build.
+3. Package the working Mac host as a macOS `.app` whose executable starts it with the correct game-data and save paths. Upstream’s Mac target is a development host and does not currently produce a ready-made Mac app, so this wrapper is an additional step. An iPhone/iPad `.ipa` cannot be added to Swoosh.
+4. Put the `.app` and its required data together in an individual folder under `~/Games/Switch/`, following the layout below. Keep the app’s relative data paths intact. Swoosh will discover it automatically.
+
+Swoosh does not obtain games, extract keys, convert archives or apply game updates. Keep source archives, keys and converted game data outside this repository.
+
 ## Library layout
 
 ```text
