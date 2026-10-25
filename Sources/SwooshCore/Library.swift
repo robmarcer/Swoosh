@@ -5,6 +5,7 @@ public struct Game: Identifiable, Equatable, Sendable {
     public let name: String
     public let coverURL: URL?
     public var id: String { url.path }
+    public func withCover(_ cover: URL) -> Game { Game(url: url, name: name, coverURL: cover) }
 }
 
 public struct LibraryScan {

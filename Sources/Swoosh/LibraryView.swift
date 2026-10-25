@@ -51,6 +51,9 @@ struct LibraryView: View {
                             VStack(alignment: .leading, spacing: 6) {
                                 Text("READY TO PLAY").font(.system(size: 11, weight: .semibold, design: .monospaced)).tracking(2).foregroundStyle(Palette.muted)
                                 Text(selected.name).font(.system(size: 24, weight: .medium)).lineLimit(2)
+                                if let artwork = model.selectedArtwork {
+                                    Link("Artwork · Wikipedia", destination: artwork.sourceURL).font(.system(size: 12)).foregroundStyle(Palette.muted)
+                                }
                             }
                             Spacer(minLength: 20)
                             Button { model.confirm() } label: {
@@ -111,7 +114,7 @@ struct LibraryView: View {
             hint("A", "Play")
             hint("≡", "Settings")
             Spacer()
-            Text("Library updates automatically").font(.system(size: 12)).foregroundStyle(Palette.muted)
+            Text(model.fetchingArtwork ? "Finding artwork…" : "Library updates automatically").font(.system(size: 12)).foregroundStyle(Palette.muted)
         }.padding(.top, 18).overlay(alignment: .top) { Rectangle().fill(Palette.muted.opacity(0.18)).frame(height: 1) }
     }
 
@@ -129,7 +132,8 @@ struct LibraryView: View {
             VStack(spacing: 12) {
                 action("Fullscreen     \(model.fullscreen ? "On" : "Off")", selected: model.settingsFocus == 0) { model.setFullscreen(!model.fullscreen) }
                 action("Open at login     \(model.loginEnabled ? "On" : "Off")", selected: model.settingsFocus == 1) { model.toggleLogin() }
-                action("Done", selected: model.settingsFocus == 2) { model.showingSettings = false }
+                action("Download artwork     \(model.artworkEnabled ? "On" : "Off")", selected: model.settingsFocus == 2) { model.toggleArtwork() }
+                action("Done", selected: model.settingsFocus == 3) { model.showingSettings = false }
                 Text(model.folder.path).font(.system(size: 12, design: .monospaced)).foregroundStyle(Palette.muted).padding(.top, 12).textSelection(.enabled)
                 Text("↑ ↓ Select     A Confirm     B Back").font(.system(size: 13)).foregroundStyle(Palette.muted)
             }

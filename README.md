@@ -33,7 +33,15 @@ The release is locally ad-hoc signed and is not notarized with an Apple Develope
 
 Discovery supports apps at the library root or one folder below it. It skips hidden entries, broken bundles and non-executable apps, and does not descend into game data. Symlinks to app bundles are supported and deduplicated. The library refreshes every two seconds and preserves the selected game when possible.
 
-Keep any relative app/data layout required by the converted build. Swoosh does not relocate saves, repair bundle paths, or convert games. New game folders appear automatically. Optional cover artwork belongs beside an app inside its individual game folder; otherwise Swoosh displays a title card.
+Keep any relative app/data layout required by the converted build. Swoosh does not relocate saves, repair bundle paths, or convert games. New game folders appear automatically.
+
+## Artwork
+
+Swoosh automatically looks up missing artwork using Wikipedia’s [PageImages API](https://www.mediawiki.org/wiki/API:Pageimages). It requires a matching video game page or an explicit redirect; unrelated search results are ignored. Some titles may not have a matching image.
+
+Downloads are on by default and can be disabled in Settings → Download artwork; already cached images remain visible. Only game titles are sent to Wikipedia; local paths, game data and saves are not uploaded. Images and source links are cached in `~/Library/Caches/Swoosh/Artwork/` so artwork remains available offline. The selected game’s **Artwork · Wikipedia** link opens the image’s source and rights information. Downloaded artwork is not bundled with Swoosh releases.
+
+Your own `cover.jpg` or `cover.png` beside an app inside its individual game folder always takes priority. Missing or unavailable artwork leaves a title card. Failed downloads back off for 15 minutes, and missing matches are cached for seven days.
 
 ## Controls
 
@@ -49,7 +57,7 @@ The home confirmation defaults to **Keep playing**. Move right to select **Quit 
 
 Swoosh passes `DM_FULLSCREEN=1` to launched games. NXnative builds supporting that flag start fullscreen; other apps control their own display mode. It tracks the launched application and brings the library forward when it exits. It does not distinguish normal exits from crashes or resume unsaved progress.
 
-Settings provide fullscreen and opt-in launch at login. Login startup requires a packaged application installed at a stable location, such as Applications. Any macOS approval remains in System Settings; Swoosh does not change login or disk-encryption settings.
+Settings provide fullscreen, automatic artwork downloads and opt-in launch at login. Login startup requires a packaged application installed at a stable location, such as Applications. Any macOS approval remains in System Settings; Swoosh does not change login or disk-encryption settings.
 
 Only one Swoosh instance can run on a Mac at a time, including copies launched from different folders. Opening a second copy brings the existing instance forward in the same login session. If Swoosh is running under another account, the second copy exits. A kernel lock releases automatically on exit or crash; no stale-process cleanup is needed.
 
@@ -77,7 +85,7 @@ SWOOSH_LIBRARY=/path/to/test-library SWOOSH_WINDOWED=1 build/Swoosh.app/Contents
 
 ## Validation and limits
 
-Automated tests cover discovery layouts, live add/remove scans, invalid apps, symlink deduplication, cover scoping, grid boundaries, and instance locking. Build and tests have been run on Apple silicon with macOS 26 and 27 SDKs. Runtime checks cover the native library interface, keyboard navigation, settings, launch/return handling with a test app, duplicate-copy rejection, and restarting after a simulated crash.
+Automated tests cover discovery layouts, live add/remove scans, invalid apps, symlink deduplication, cover scoping, grid boundaries, instance locking, artwork matching, cached offline images, image validation and network backoff. Build and tests have been run on Apple silicon with macOS 26 and 27 SDKs. Runtime checks cover the native library interface, keyboard navigation, settings, launch/return handling with a test app, duplicate-copy rejection, and restarting after a simulated crash.
 
 Physical controller reconnection, the background return-home chord and login startup still need hands-on validation. This first release is an early preview.
 

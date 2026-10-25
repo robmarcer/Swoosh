@@ -17,11 +17,17 @@ import SwooshCore
     @Published var settingsFocus = 0
     @Published var loginEnabled = SMAppService.mainApp.status == .enabled
     @Published var fullscreen = UserDefaults.standard.object(forKey: "fullscreen") as? Bool ?? true
+    @Published var artworkEnabled = UserDefaults.standard.object(forKey: "artworkEnabled") as? Bool ?? true
+    @Published var artworks: [String: Artwork] = [:]
+    @Published var fetchingArtwork = false
     var columns = 4
     let folder: URL
     private var timer: Timer?
     private var terminationObserver: NSObjectProtocol?
     private var didLaunch = false
+    private let artworkStore = ArtworkStore()
+    private var artworkTask: Task<Void, Never>?
+    private var artworkRetryAt: [String: Date] = [:]
 
     init() {
         // Override is for development / testing; the installed app defaults to the agreed folder.
@@ -46,16 +52,54 @@ import SwooshCore
     var selected: Game? { games.first { $0.id == selectedID } ?? games.first }
     func refresh() {
         let scan = Library.scan(folder)
-        if games != scan.games { games = scan.games }
+        let decorated = scan.games.map { game in
+            if game.coverURL == nil, let artwork = artworks[game.name] { return game.withCover(artwork.imageURL) }
+            return game
+        }
+        if games != decorated { games = decorated }
         if !games.contains(where: { $0.id == selectedID }) { selectedID = games.first?.id }
         if let problem = scan.issue { issue = problem }
         if running?.isTerminated == true { finishSession() }
+        loadArtwork(for: scan.games)
+    }
+
+    var selectedArtwork: Artwork? {
+        guard let selected, let artwork = artworks[selected.name], selected.coverURL == artwork.imageURL else { return nil }
+        return artwork
+    }
+
+    private func loadArtwork(for library: [Game]) {
+        guard artworkTask == nil else { return }
+        let pending = library.filter { $0.coverURL == nil && artworks[$0.name] == nil && (artworkRetryAt[$0.name] ?? .distantPast) <= Date() }
+        guard !pending.isEmpty else { return }
+        fetchingArtwork = true
+        artworkTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            for game in pending {
+                if Task.isCancelled { break }
+                self.artworkRetryAt[game.name] = Date().addingTimeInterval(15 * 60)
+                if let artwork = await self.artworkStore.artwork(for: game.name, allowNetwork: self.artworkEnabled), !Task.isCancelled {
+                    self.artworks[game.name] = artwork
+                    self.refresh()
+                }
+            }
+            self.fetchingArtwork = false
+            self.artworkTask = nil
+        }
+    }
+
+    func toggleArtwork() {
+        artworkEnabled.toggle()
+        UserDefaults.standard.set(artworkEnabled, forKey: "artworkEnabled")
+        if artworkEnabled { artworkRetryAt.removeAll() }
+        else { artworkTask?.cancel() }
+        refresh()
     }
 
     func move(_ direction: Direction) {
         if showingQuit { quitFocused = direction == .right; return }
         if showingSettings {
-            if direction == .down { settingsFocus = min(2, settingsFocus + 1) }
+            if direction == .down { settingsFocus = min(3, settingsFocus + 1) }
             if direction == .up { settingsFocus = max(0, settingsFocus - 1) }
             return
         }
@@ -71,6 +115,7 @@ import SwooshCore
             switch settingsFocus {
             case 0: setFullscreen(!fullscreen)
             case 1: toggleLogin()
+            case 2: toggleArtwork()
             default: showingSettings = false
             }
             return

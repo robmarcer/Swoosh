@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.0
+
+- Download artwork automatically from matching Wikipedia video game pages, without an API key.
+- Cache downloaded artwork and its source for offline use.
+- Preserve local cover overrides and leave unmatched games as title cards.
+- Add an artwork-download setting and a source link for downloaded images.
+- Match explicit redirects, reject unrelated search results, and back off after network failures or missing artwork.
+- Add tests for matching, image validation, offline caching and retry suppression.
+
 ## 0.1.0
 
 Initial Apple silicon preview.
