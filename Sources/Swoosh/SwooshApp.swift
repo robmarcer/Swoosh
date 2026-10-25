@@ -52,8 +52,10 @@ struct SwooshApp: App {
         input = ControllerInput(model: model)
         NSApp.activate(ignoringOtherApps: true)
         activationObserver = DistributedNotificationCenter.default().addObserver(forName: Notification.Name("dev.swoosh.launcher.activate"), object: nil, queue: .main) { _ in
-            NSApp.activate(ignoringOtherApps: true)
-            NSApp.windows.first?.makeKeyAndOrderFront(nil)
+            Task { @MainActor in
+                NSApp.activate(ignoringOtherApps: true)
+                NSApp.windows.first?.makeKeyAndOrderFront(nil)
+            }
         }
     }
 

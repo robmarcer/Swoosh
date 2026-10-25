@@ -1,4 +1,4 @@
-import AppKit
+@preconcurrency import AppKit
 import SwiftUI
 import ServiceManagement
 import SwooshCore
@@ -31,12 +31,13 @@ import SwooshCore
         catch { issue = "Could not create the game folder: \(error.localizedDescription)" }
         refresh()
         timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.refresh() }
+            Task { @MainActor [weak self] in self?.refresh() }
         }
         terminationObserver = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didTerminateApplicationNotification, object: nil, queue: .main) { [weak self] note in
             guard let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
-            Task { @MainActor in
-                guard let self, app.processIdentifier == self.running?.processIdentifier else { return }
+            let processIdentifier = app.processIdentifier
+            Task { @MainActor [weak self] in
+                guard let self, processIdentifier == self.running?.processIdentifier else { return }
                 self.finishSession()
             }
         }
@@ -98,7 +99,7 @@ import SwooshCore
         // Scoped to this game process; no global environment changes.
         config.environment = ["DM_FULLSCREEN": "1"]
         NSWorkspace.shared.openApplication(at: game.url, configuration: config) { [weak self] app, error in
-            Task { @MainActor in
+            Task { @MainActor [weak self] in
                 guard let self else { return }
                 self.launching = false
                 guard let app, error == nil else {

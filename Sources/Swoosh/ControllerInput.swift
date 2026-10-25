@@ -18,7 +18,7 @@ import SwooshCore
         GCController.shouldMonitorBackgroundEvents = true
         GCController.startWirelessControllerDiscovery(completionHandler: nil)
         timer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.poll() }
+            Task { @MainActor [weak self] in self?.poll() }
         }
         keyboard = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard !event.modifierFlags.contains(.command), let self, let model = self.model else { return event }
