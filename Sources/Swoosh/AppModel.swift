@@ -31,6 +31,7 @@ import SwooshCore
     private var artworkTask: Task<Void, Never>?
     private var artworkRetryAt: [String: Date] = [:]
     private let releaseStore = GameReleaseStore()
+    private let releaseLabelStore = ReleaseLabelStore()
     private var versionTask: Task<Void, Never>?
     private var nextVersionCheck = Date.distantPast
 
@@ -70,7 +71,11 @@ import SwooshCore
     }
 
     func versionStatus(for game: Game) -> VersionComparison {
-        VersionComparison.compare(game.installedVersion, release: game.installedVersion.flatMap { releaseSnapshot?.releases[$0.titleID] })
+        VersionComparison.compare(game.installedVersion, release: latestRelease(for: game))
+    }
+
+    func latestRelease(for game: Game) -> GameRelease? {
+        game.installedVersion.flatMap { releaseSnapshot?.releases[$0.titleID] }
     }
 
     func refreshVersions(force: Bool = false) {
@@ -78,8 +83,19 @@ import SwooshCore
         checkingVersions = true
         versionTask = Task { @MainActor [weak self] in
             guard let self else { return }
-            let snapshot = await self.releaseStore.releases(force: force)
+            var snapshot = await self.releaseStore.releases(force: force)
             self.releaseSnapshot = snapshot
+            let ids = Set(self.games.compactMap { $0.installedVersion?.titleID }).sorted()
+            for id in ids {
+                guard let release = snapshot?.releases[id] else { continue }
+                if let label = await self.releaseLabelStore.label(titleID: id, contentVersion: release.contentVersion) {
+                    var named = release
+                    named.displayVersion = label.displayVersion
+                    named.versionSourceURL = label.sourceURL
+                    snapshot?.releases[id] = named
+                    self.releaseSnapshot = snapshot
+                }
+            }
             self.nextVersionCheck = Date().addingTimeInterval(snapshot == nil || snapshot?.isStale == true ? 15 * 60 : 86400)
             self.checkingVersions = false
             self.versionTask = nil

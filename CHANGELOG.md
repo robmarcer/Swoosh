@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.1
+
+- Show installed and latest known versions together on game cards and in selection details.
+- Resolve marketing version labels from exact title/revision build rows in published NXnative profiles.
+- Cache verified labels for offline use and link to the mapping source.
+- Fall back to the latest numeric content revision when no exact display label is available.
+
 ## 0.3.0
 
 - Flag games with a newer known release directly on their covers.

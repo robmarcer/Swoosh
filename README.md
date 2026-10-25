@@ -64,7 +64,7 @@ Only one Swoosh instance can run on a Mac at a time, including copies launched f
 
 ## Game release checks
 
-Games with a newer known release receive an **Update available** badge. The selected game shows its installed version. Swoosh reads the active `package` and matching `build` row from NXnative `GameData/profile/<titleID>/game.tsv`; comments and macOS bundle versions are not used as game-version evidence.
+Games with a newer known release receive an **Update available** badge. Game cards and selection details show **Installed → Latest** versions together. Swoosh reads the active `package` and matching `build` row from NXnative `GameData/profile/<titleID>/game.tsv`; comments and macOS bundle versions are not used as game-version evidence.
 
 Other converted builds can supply `SwooshGame.json` beside the app inside its individual game folder:
 
@@ -80,7 +80,9 @@ Use verified base-title IDs and numeric Switch content versions from the convert
 
 Release checks download the [TitleDB version-history metadata](https://github.com/blawar/titledb/blob/master/versions.json) once per day and compare content revisions locally. No game names, title IDs, paths, keys, saves or game data are sent to this source. Press **Y** or **R** to request a refresh; network checks are limited to one per minute. The cache lives in `~/Library/Caches/Swoosh/Versions/` and remains usable offline.
 
-**Latest known** means the installed revision matches this community catalogue, not a guarantee that Nintendo has published nothing newer. Cached data is identified when over a day old. Newer local builds are never marked outdated. If no display version for the latest release is provided by a reliable source, Swoosh reports that a newer release exists without inventing its version string. Updating a game still requires a compatible converted build; Swoosh does not download or install game updates.
+To label the latest revision, Swoosh requests the title’s published [NXnative game profile](https://github.com/seedds/nxnative/tree/main/dm/games) from GitHub. Only an explicit `build` row matching both the title ID and exact catalogue revision is accepted. This optional lookup sends the title ID in a public profile URL; no local paths, game files, keys or saves are sent. Verified labels are cached under `Versions/Labels/` for offline use. Missing mappings are cached for a day and failures are throttled.
+
+**Latest known** means the installed revision matches this community catalogue, not a guarantee that Nintendo has published nothing newer. Cached data is identified when over a day old. Newer local builds are never marked outdated. If no exact display label is available, **Latest revision …** shows the numeric content version instead of a guessed marketing version. Updating a game still requires a compatible converted build; Swoosh does not download or install game updates.
 
 ## Build
 

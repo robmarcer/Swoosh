@@ -58,10 +58,13 @@ public struct InstalledGameVersion: Equatable, Codable, Sendable {
 public struct GameRelease: Codable, Equatable, Sendable {
     public let contentVersion: UInt32
     public let releaseDate: String?
+    public var displayVersion: String? = nil
+    public var versionSourceURL: URL? = nil
+    public var label: String { displayVersion.map { $0.lowercased().hasPrefix("v") ? $0 : "v" + $0 } ?? "revision \(contentVersion)" }
 }
 
 public struct ReleaseSnapshot: Codable, Sendable {
-    public let releases: [String: GameRelease]
+    public var releases: [String: GameRelease]
     public let checkedAt: Date
     public var isStale: Bool { Date().timeIntervalSince(checkedAt) > 86400 }
 }

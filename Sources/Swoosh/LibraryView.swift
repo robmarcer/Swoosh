@@ -34,7 +34,7 @@ struct LibraryView: View {
                             ScrollView {
                                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 20), count: columns), spacing: 24) {
                                     ForEach(model.games) { game in
-                                        GameTile(game: game, selected: game.id == model.selected?.id, updateAvailable: model.versionStatus(for: game) == .updateAvailable) {
+                                        GameTile(game: game, selected: game.id == model.selected?.id, updateAvailable: model.versionStatus(for: game) == .updateAvailable, latest: model.latestRelease(for: game)) {
                                             if model.selectedID == game.id { model.launchSelected() }
                                             else { model.selectedID = game.id }
                                         }.id(game.id)
@@ -58,6 +58,9 @@ struct LibraryView: View {
                                     }
                                     if selected.installedVersion != nil {
                                         Link(model.releaseSnapshot?.isStale == true ? "Release data · cached" : "Release data · TitleDB", destination: GameReleaseStore.sourceURL).font(.system(size: 12)).foregroundStyle(Palette.muted)
+                                    }
+                                    if let source = model.latestRelease(for: selected)?.versionSourceURL {
+                                        Link("Version label · NXnative", destination: source).font(.system(size: 12)).foregroundStyle(Palette.muted)
                                     }
                                 }
                             }
@@ -129,6 +132,9 @@ struct LibraryView: View {
         if let installed = game.installedVersion {
             HStack(spacing: 12) {
                 Text("Installed \(installed.label)").foregroundStyle(Palette.muted)
+                if let latest = model.latestRelease(for: game) {
+                    Text("→  Latest \(latest.label)").foregroundStyle(Palette.ink)
+                }
                 switch model.versionStatus(for: game) {
                 case .updateAvailable:
                     Label("Update available", systemImage: "arrow.down.circle.fill").foregroundStyle(Color(red: 1, green: 0.78, blue: 0.35))
@@ -204,6 +210,7 @@ private struct GameTile: View {
     let game: Game
     let selected: Bool
     let updateAvailable: Bool
+    let latest: GameRelease?
     let action: () -> Void
     var body: some View {
         Button(action: action) {
@@ -231,6 +238,13 @@ private struct GameTile: View {
                         }
                     }
                 Text(game.name).font(.system(size: 15, weight: selected ? .semibold : .regular)).lineLimit(2).multilineTextAlignment(.leading)
+                if let installed = game.installedVersion {
+                    HStack(spacing: 8) {
+                        Text("Installed \(installed.label)")
+                        Text("→")
+                        Text(latest.map { "Latest \($0.label)" } ?? "Latest unknown")
+                    }.font(.system(size: 12)).foregroundStyle(Palette.muted)
+                }
             }
             .padding(8)
             .background(selected ? Palette.accent.opacity(0.08) : Color.clear, in: RoundedRectangle(cornerRadius: 23))

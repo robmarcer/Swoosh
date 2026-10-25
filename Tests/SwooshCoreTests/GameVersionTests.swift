@@ -1,7 +1,7 @@
 import XCTest
 @testable import SwooshCore
 
-private final class VersionProtocol: URLProtocol {
+final class VersionProtocol: URLProtocol {
     private static let lock = NSLock()
     private static var bytes = Data()
     private static var code = 200
