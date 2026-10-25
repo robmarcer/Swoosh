@@ -37,9 +37,9 @@ Keep any relative app/data layout required by the converted build. Swoosh does n
 
 ## Artwork
 
-Swoosh automatically looks up missing artwork using Wikipedia’s [PageImages API](https://www.mediawiki.org/wiki/API:Pageimages). It requires a matching video game page or an explicit redirect; unrelated search results are ignored. Some titles may not have a matching image.
+Swoosh first checks Nintendo’s game catalogue for original artwork with at least 1000 pixels on each side. It verifies the downloaded dimensions and upgrades older low-resolution cache entries automatically. It falls back to Wikipedia’s [PageImages API](https://www.mediawiki.org/wiki/API:Pageimages) when an original is unavailable. Matching requires an exact game title, a unique exact Nintendo subtitle, or an explicit Wikipedia redirect; unrelated search results are ignored. Some titles may not have a matching image.
 
-Downloads are on by default and can be disabled in Settings → Download artwork; already cached images remain visible. Only game titles are sent to Wikipedia; local paths, game data and saves are not uploaded. Images and source links are cached in `~/Library/Caches/Swoosh/Artwork/` so artwork remains available offline. The selected game’s **Artwork · Wikipedia** link opens the image’s source and rights information. Downloaded artwork is not bundled with Swoosh releases.
+Downloads are on by default and can be disabled in Settings → Download artwork; already cached images remain visible. Only game titles are sent to Nintendo and Wikipedia; local paths, game data and saves are not uploaded. Images and source links are cached in `~/Library/Caches/Swoosh/Artwork/` so artwork remains available offline. The selected game’s **Artwork** link opens the provider’s source page. Downloaded artwork is not bundled with Swoosh releases.
 
 Your own `cover.jpg` or `cover.png` beside an app inside its individual game folder always takes priority. Missing or unavailable artwork leaves a title card. Failed downloads back off for 15 minutes, and missing matches are cached for seven days.
 

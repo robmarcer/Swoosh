@@ -52,7 +52,7 @@ struct LibraryView: View {
                                 Text("READY TO PLAY").font(.system(size: 11, weight: .semibold, design: .monospaced)).tracking(2).foregroundStyle(Palette.muted)
                                 Text(selected.name).font(.system(size: 24, weight: .medium)).lineLimit(2)
                                 if let artwork = model.selectedArtwork {
-                                    Link("Artwork · Wikipedia", destination: artwork.sourceURL).font(.system(size: 12)).foregroundStyle(Palette.muted)
+                                    Link("Artwork · \(artwork.sourceName)", destination: artwork.sourceURL).font(.system(size: 12)).foregroundStyle(Palette.muted)
                                 }
                             }
                             Spacer(minLength: 20)

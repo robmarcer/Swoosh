@@ -43,17 +43,18 @@ final class ArtworkTests: XCTestCase {
          "thumbnail": ["source": "https://\(host)/wikipedia/en/test.png?utm_source=example"],
          "pageimage": "Aurora cover.png"]
     }
-    private func store(_ replies: [ArtworkProtocol.Reply]) -> ArtworkStore {
-        ArtworkProtocol.prepare(replies)
+    private func store(_ replies: [ArtworkProtocol.Reply], skipNintendo: Bool = true) -> ArtworkStore {
+        let emptyCatalogue = Data(#"{"response":{"docs":[]}}"#.utf8)
+        ArtworkProtocol.prepare(skipNintendo && !replies.isEmpty ? [.init(data: emptyCatalogue)] + replies : replies)
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [ArtworkProtocol.self]
         return ArtworkStore(folder: root, session: URLSession(configuration: configuration))
     }
-    private func png() throws -> Data {
-        let context = CGContext(data: nil, width: 16, height: 24, bitsPerComponent: 8, bytesPerRow: 64,
+    private func png(size: Int = 16) throws -> Data {
+        let context = CGContext(data: nil, width: size, height: size, bitsPerComponent: 8, bytesPerRow: size * 4,
                                 space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
         context.setFillColor(CGColor(red: 0.2, green: 0.5, blue: 0.5, alpha: 1))
-        context.fill(CGRect(x: 0, y: 0, width: 16, height: 24))
+        context.fill(CGRect(x: 0, y: 0, width: size, height: size))
         let data = NSMutableData()
         let destination = CGImageDestinationCreateWithData(data, UTType.png.identifier as CFString, 1, nil)!
         CGImageDestinationAddImage(destination, context.makeImage()!, nil)
@@ -88,7 +89,7 @@ final class ArtworkTests: XCTestCase {
         let client = store([.init(data: response), .init(data: try png(), type: "image/png")])
         let result = await client.artwork(for: "Aurora")
         XCTAssertNotNil(result)
-        XCTAssertEqual(ArtworkProtocol.requests, 2)
+        XCTAssertEqual(ArtworkProtocol.requests, 3)
         XCTAssertTrue(FileManager.default.fileExists(atPath: result!.imageURL.path))
         let offline = store([])
         let cached = await offline.artwork(for: "Aurora", allowNetwork: false)
@@ -109,7 +110,7 @@ final class ArtworkTests: XCTestCase {
         let first = await client.artwork(for: "Aurora")
         let second = await client.artwork(for: "Aurora")
         XCTAssertNil(first); XCTAssertNil(second)
-        XCTAssertEqual(ArtworkProtocol.requests, 2)
+        XCTAssertEqual(ArtworkProtocol.requests, 3)
     }
 
     func testServerFailureBacksOffAndInvalidImageIsNotSaved() async throws {
@@ -117,11 +118,50 @@ final class ArtworkTests: XCTestCase {
         let first = await unavailable.artwork(for: "Aurora")
         let second = await unavailable.artwork(for: "Aurora")
         XCTAssertNil(first); XCTAssertNil(second)
-        XCTAssertEqual(ArtworkProtocol.requests, 1)
+        XCTAssertEqual(ArtworkProtocol.requests, 2)
         let invalid = store([.init(data: try json(["query": ["pages": [page(title: "Orbit")]]])),
                              .init(data: Data("not an image".utf8), type: "image/png")])
         let result = await invalid.artwork(for: "Orbit")
         XCTAssertNil(result)
         XCTAssertTrue(try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil).allSatisfy { $0.pathExtension != "png" })
+    }
+
+    private func nintendoPage(title: String = "Aurora", path: String = "Aurora-123.html") -> [String: Any] {
+        ["type": "GAME", "title": title, "url": "/en-gb/Games/Nintendo-Switch-games/" + path,
+         "image_url_sq_s": "https://www.nintendo.com/eu/media/images/Aurora_image500w.jpg"]
+    }
+
+    func testNintendoOriginalAssetAndExactSubtitleMatch() throws {
+        XCTAssertEqual(NintendoArtworkLookup.searchQuery("Chronicles: Aurora™"), "Chronicles Aurora")
+        let data = try json(["response": ["docs": [nintendoPage(title: "Chronicles: Aurora")]]])
+        let candidates = try NintendoArtworkLookup.candidates(data, name: "Aurora")
+        XCTAssertEqual(candidates.count, 1)
+        XCTAssertEqual(candidates.first?.imageURL.path, "/eu/media/images/Aurora.jpg")
+        XCTAssertEqual(candidates.first?.sourceURL.host, "www.nintendo.com")
+    }
+
+    func testNintendoRejectsOtherGamesEditionsAndAmbiguousSubtitles() throws {
+        let unrelated = try json(["response": ["docs": [nintendoPage(title: "Aurora II"), nintendoPage(title: "Aurora – New Edition")]]])
+        XCTAssertTrue(try NintendoArtworkLookup.candidates(unrelated, name: "Aurora").isEmpty)
+        let ambiguous = try json(["response": ["docs": [nintendoPage(title: "Chronicles: Aurora"), nintendoPage(title: "Stories: Aurora", path: "Other-456.html")]]])
+        XCTAssertTrue(try NintendoArtworkLookup.candidates(ambiguous, name: "Aurora").isEmpty)
+    }
+
+    func testLowResolutionLegacyCacheIsUpgradedFromOriginalSource() async throws {
+        let legacy = store([.init(data: try json(["query": ["pages": [page()]]])), .init(data: try png(), type: "image/png")])
+        let old = await legacy.artwork(for: "Aurora")
+        XCTAssertNotNil(old)
+        let metadata = old!.imageURL.deletingPathExtension().appendingPathExtension("json")
+        var record = try JSONSerialization.jsonObject(with: Data(contentsOf: metadata)) as! [String: Any]
+        record.removeValue(forKey: "qualityVersion")
+        try json(record).write(to: metadata)
+        let upgradedStore = store([.init(data: try json(["response": ["docs": [nintendoPage()]]])),
+                                   .init(data: try png(size: 1000), type: "image/png")], skipNintendo: false)
+        let upgraded = await upgradedStore.artwork(for: "Aurora")
+        XCTAssertEqual(upgraded?.sourceName, "Nintendo")
+        XCTAssertEqual(ArtworkProtocol.requests, 2)
+        let cached = await upgradedStore.artwork(for: "Aurora")
+        XCTAssertEqual(cached, upgraded)
+        XCTAssertEqual(ArtworkProtocol.requests, 2)
     }
 }

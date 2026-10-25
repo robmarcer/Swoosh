@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.1
+
+- Prefer original Nintendo catalogue artwork with at least 1000 pixels on each side, verifying downloaded dimensions.
+- Upgrade existing low-resolution artwork caches automatically, with Wikipedia as a fallback.
+- Show the correct artwork provider in source links.
+- Preserve cached images when offline or when a higher-resolution source is unavailable.
+
 ## 0.2.0
 
 - Download artwork automatically from matching Wikipedia video game pages, without an API key.
