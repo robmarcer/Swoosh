@@ -1,0 +1,14 @@
+.DS_Store
+.build/
+DerivedData/
+build/
+*.xcuserstate
+xcuserdata/
+.env
+.env.*
+*.keys
+*.nsp
+*.xci
+*.app/
+GameData/
+saves/
