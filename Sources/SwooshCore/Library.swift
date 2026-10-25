@@ -4,8 +4,9 @@ public struct Game: Identifiable, Equatable, Sendable {
     public let url: URL
     public let name: String
     public let coverURL: URL?
+    public var installedVersion: InstalledGameVersion? = nil
     public var id: String { url.path }
-    public func withCover(_ cover: URL) -> Game { Game(url: url, name: name, coverURL: cover) }
+    public func withCover(_ cover: URL) -> Game { Game(url: url, name: name, coverURL: cover, installedVersion: installedVersion) }
 }
 
 public struct LibraryScan {
@@ -35,7 +36,8 @@ public enum Library {
             let parent = resolved.deletingLastPathComponent()
             // A shared library-level cover must not become every top-level app's cover.
             let cover = parent.standardizedFileURL == folder.standardizedFileURL ? nil : ["cover.jpg", "cover.png"].map { parent.appendingPathComponent($0) }.first { fm.fileExists(atPath: $0.path) }
-            games.append(Game(url: resolved, name: title, coverURL: cover))
+            let version = InstalledGameVersion.read(beside: resolved, libraryRoot: folder)
+            games.append(Game(url: resolved, name: title, coverURL: cover, installedVersion: version))
         }
         do {
             let entries = try fm.contentsOfDirectory(at: folder, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles])

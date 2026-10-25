@@ -20,6 +20,8 @@ import SwooshCore
     @Published var artworkEnabled = UserDefaults.standard.object(forKey: "artworkEnabled") as? Bool ?? true
     @Published var artworks: [String: Artwork] = [:]
     @Published var fetchingArtwork = false
+    @Published var releaseSnapshot: ReleaseSnapshot?
+    @Published var checkingVersions = false
     var columns = 4
     let folder: URL
     private var timer: Timer?
@@ -28,6 +30,9 @@ import SwooshCore
     private let artworkStore = ArtworkStore()
     private var artworkTask: Task<Void, Never>?
     private var artworkRetryAt: [String: Date] = [:]
+    private let releaseStore = GameReleaseStore()
+    private var versionTask: Task<Void, Never>?
+    private var nextVersionCheck = Date.distantPast
 
     init() {
         // Override is for development / testing; the installed app defaults to the agreed folder.
@@ -61,6 +66,24 @@ import SwooshCore
         if let problem = scan.issue { issue = problem }
         if running?.isTerminated == true { finishSession() }
         loadArtwork(for: scan.games)
+        refreshVersions()
+    }
+
+    func versionStatus(for game: Game) -> VersionComparison {
+        VersionComparison.compare(game.installedVersion, release: game.installedVersion.flatMap { releaseSnapshot?.releases[$0.titleID] })
+    }
+
+    func refreshVersions(force: Bool = false) {
+        guard versionTask == nil, games.contains(where: { $0.installedVersion != nil }), force || Date() >= nextVersionCheck else { return }
+        checkingVersions = true
+        versionTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            let snapshot = await self.releaseStore.releases(force: force)
+            self.releaseSnapshot = snapshot
+            self.nextVersionCheck = Date().addingTimeInterval(snapshot == nil || snapshot?.isStale == true ? 15 * 60 : 86400)
+            self.checkingVersions = false
+            self.versionTask = nil
+        }
     }
 
     var selectedArtwork: Artwork? {

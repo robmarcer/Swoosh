@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.0
+
+- Flag games with a newer known release directly on their covers.
+- Show installed game versions from explicit manifests or the active NXnative package/build rows.
+- Compare numeric content revisions against the TitleDB release catalogue, without guessing marketing version numbers.
+- Cache release metadata for offline use and check automatically once a day.
+- Add Y / R to check game updates manually, with request throttling.
+- Show unknown, cached and newer-than-catalogue states without false update claims.
+
 ## 0.2.1
 
 - Prefer original Nintendo catalogue artwork with at least 1000 pixels on each side, verifying downloaded dimensions.

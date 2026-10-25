@@ -30,6 +30,7 @@ import SwooshCore
             case 36, 49: if !event.isARepeat { model.confirm() }
             case 53: model.back()
             case 1: if !event.isARepeat { model.openSettings() }
+            case 15: if !event.isARepeat { model.refreshVersions(force: true) }
             default: return event
             }
             return nil
@@ -43,7 +44,7 @@ import SwooshCore
         let identity = controller.map { ObjectIdentifier($0) }
         if identity != activeController {
             // A button held while connecting must be released before it can trigger an action.
-            activeController = identity; pressed = ["a", "b", "menu"]; heldDirection = nil
+            activeController = identity; pressed = ["a", "b", "y", "menu"]; heldDirection = nil
             homeStarted = nil; homeTriggered = false
         }
         let name = controller?.vendorName ?? (controller == nil ? nil : "Controller")
@@ -71,6 +72,7 @@ import SwooshCore
         heldDirection = direction
         edge("a", pad.buttonA.isPressed) { model.confirm() }
         edge("b", pad.buttonB.isPressed) { model.back() }
+        edge("y", pad.buttonY.isPressed) { if model.running == nil && !model.showingSettings { model.refreshVersions(force: true) } }
         edge("menu", pad.buttonMenu.isPressed) { model.openSettings() }
     }
 

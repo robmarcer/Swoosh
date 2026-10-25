@@ -51,6 +51,7 @@ Your own `cover.jpg` or `cover.png` beside an app inside its individual game fol
 | Play / confirm | A (bottom face button) | Return / Space |
 | Back / cancel | B (right face button) | Escape |
 | Settings | Menu / Start | S or Command-comma |
+| Check game updates | Y (top face button) | R |
 | Return-home confirmation during a game | Hold View + Menu for 1.5 seconds | Switch to Swoosh and choose Quit game |
 
 The home confirmation defaults to **Keep playing**. Move right to select **Quit game**, then confirm. Save in the game before quitting. Swoosh sends a normal macOS quit request and never force-kills a game. The home chord requires a controller exposing both Menu and Options/View buttons; the foreground game also receives those buttons.
@@ -60,6 +61,26 @@ Swoosh passes `DM_FULLSCREEN=1` to launched games. NXnative builds supporting th
 Settings provide fullscreen, automatic artwork downloads and opt-in launch at login. Login startup requires a packaged application installed at a stable location, such as Applications. Any macOS approval remains in System Settings; Swoosh does not change login or disk-encryption settings.
 
 Only one Swoosh instance can run on a Mac at a time, including copies launched from different folders. Opening a second copy brings the existing instance forward in the same login session. If Swoosh is running under another account, the second copy exits. A kernel lock releases automatically on exit or crash; no stale-process cleanup is needed.
+
+## Game release checks
+
+Games with a newer known release receive an **Update available** badge. The selected game shows its installed version. Swoosh reads the active `package` and matching `build` row from NXnative `GameData/profile/<titleID>/game.tsv`; comments and macOS bundle versions are not used as game-version evidence.
+
+Other converted builds can supply `SwooshGame.json` beside the app inside its individual game folder:
+
+```json
+{
+  "titleID": "0100ABCDEF120000",
+  "contentVersion": 65536,
+  "displayVersion": "1.0.1"
+}
+```
+
+Use verified base-title IDs and numeric Switch content versions from the converted package. Marketing version strings are for display only and must not be converted into content-version numbers by guessing. Missing or ambiguous installed metadata remains unknown.
+
+Release checks download the [TitleDB version-history metadata](https://github.com/blawar/titledb/blob/master/versions.json) once per day and compare content revisions locally. No game names, title IDs, paths, keys, saves or game data are sent to this source. Press **Y** or **R** to request a refresh; network checks are limited to one per minute. The cache lives in `~/Library/Caches/Swoosh/Versions/` and remains usable offline.
+
+**Latest known** means the installed revision matches this community catalogue, not a guarantee that Nintendo has published nothing newer. Cached data is identified when over a day old. Newer local builds are never marked outdated. If no display version for the latest release is provided by a reliable source, Swoosh reports that a newer release exists without inventing its version string. Updating a game still requires a compatible converted build; Swoosh does not download or install game updates.
 
 ## Build
 

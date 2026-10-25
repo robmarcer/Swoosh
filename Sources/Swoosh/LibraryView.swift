@@ -34,7 +34,7 @@ struct LibraryView: View {
                             ScrollView {
                                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 20), count: columns), spacing: 24) {
                                     ForEach(model.games) { game in
-                                        GameTile(game: game, selected: game.id == model.selected?.id) {
+                                        GameTile(game: game, selected: game.id == model.selected?.id, updateAvailable: model.versionStatus(for: game) == .updateAvailable) {
                                             if model.selectedID == game.id { model.launchSelected() }
                                             else { model.selectedID = game.id }
                                         }.id(game.id)
@@ -51,8 +51,14 @@ struct LibraryView: View {
                             VStack(alignment: .leading, spacing: 6) {
                                 Text("READY TO PLAY").font(.system(size: 11, weight: .semibold, design: .monospaced)).tracking(2).foregroundStyle(Palette.muted)
                                 Text(selected.name).font(.system(size: 24, weight: .medium)).lineLimit(2)
-                                if let artwork = model.selectedArtwork {
-                                    Link("Artwork · \(artwork.sourceName)", destination: artwork.sourceURL).font(.system(size: 12)).foregroundStyle(Palette.muted)
+                                versionDetail(selected)
+                                HStack(spacing: 16) {
+                                    if let artwork = model.selectedArtwork {
+                                        Link("Artwork · \(artwork.sourceName)", destination: artwork.sourceURL).font(.system(size: 12)).foregroundStyle(Palette.muted)
+                                    }
+                                    if selected.installedVersion != nil {
+                                        Link(model.releaseSnapshot?.isStale == true ? "Release data · cached" : "Release data · TitleDB", destination: GameReleaseStore.sourceURL).font(.system(size: 12)).foregroundStyle(Palette.muted)
+                                    }
                                 }
                             }
                             Spacer(minLength: 20)
@@ -113,9 +119,30 @@ struct LibraryView: View {
             hint("↔", "Browse")
             hint("A", "Play")
             hint("≡", "Settings")
+            hint("Y", "Check updates")
             Spacer()
-            Text(model.fetchingArtwork ? "Finding artwork…" : "Library updates automatically").font(.system(size: 12)).foregroundStyle(Palette.muted)
+            Text(model.checkingVersions ? "Checking game releases…" : (model.fetchingArtwork ? "Finding artwork…" : "Library updates automatically")).font(.system(size: 12)).foregroundStyle(Palette.muted)
         }.padding(.top, 18).overlay(alignment: .top) { Rectangle().fill(Palette.muted.opacity(0.18)).frame(height: 1) }
+    }
+
+    @ViewBuilder private func versionDetail(_ game: Game) -> some View {
+        if let installed = game.installedVersion {
+            HStack(spacing: 12) {
+                Text("Installed \(installed.label)").foregroundStyle(Palette.muted)
+                switch model.versionStatus(for: game) {
+                case .updateAvailable:
+                    Label("Update available", systemImage: "arrow.down.circle.fill").foregroundStyle(Color(red: 1, green: 0.78, blue: 0.35))
+                case .latestKnown:
+                    Text("Latest known").foregroundStyle(Palette.muted)
+                case .newerThanCatalogue:
+                    Text("Newer than catalogue").foregroundStyle(Palette.muted)
+                case .unknown:
+                    Text(model.checkingVersions ? "Checking…" : "Latest release unknown").foregroundStyle(Palette.muted)
+                }
+            }.font(.system(size: 14))
+        } else {
+            Text("Game version unavailable").font(.system(size: 13)).foregroundStyle(Palette.muted)
+        }
     }
 
     private var emptyLibrary: some View {
@@ -176,6 +203,7 @@ private struct ButtonGlyph: View {
 private struct GameTile: View {
     let game: Game
     let selected: Bool
+    let updateAvailable: Bool
     let action: () -> Void
     var body: some View {
         Button(action: action) {
@@ -194,12 +222,20 @@ private struct GameTile: View {
                         }.padding(24)
                     }
                 }.aspectRatio(0.85, contentMode: .fit).clipShape(RoundedRectangle(cornerRadius: 16))
+                    .overlay(alignment: .topTrailing) {
+                        if updateAvailable {
+                            Label("Update available", systemImage: "arrow.down.circle.fill")
+                                .font(.system(size: 12, weight: .semibold)).padding(.horizontal, 12).padding(.vertical, 9)
+                                .foregroundStyle(Palette.background)
+                                .background(Color(red: 1, green: 0.78, blue: 0.35), in: Capsule()).padding(12)
+                        }
+                    }
                 Text(game.name).font(.system(size: 15, weight: selected ? .semibold : .regular)).lineLimit(2).multilineTextAlignment(.leading)
             }
             .padding(8)
             .background(selected ? Palette.accent.opacity(0.08) : Color.clear, in: RoundedRectangle(cornerRadius: 23))
             .overlay(RoundedRectangle(cornerRadius: 23).strokeBorder(selected ? Palette.accent : Color.clear, lineWidth: 3))
             .foregroundStyle(Palette.ink)
-        }.buttonStyle(.plain).accessibilityLabel("\(game.name)\(selected ? ", selected. Activate to play" : "")")
+        }.buttonStyle(.plain).accessibilityLabel("\(game.name)\(updateAvailable ? ", update available" : "")\(selected ? ", selected. Activate to play" : "")")
     }
 }
