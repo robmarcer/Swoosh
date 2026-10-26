@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.1
+
+- Add a native dark-and-lime Dock icon with an original flowing S mark.
+- Generate all standard and Retina icon sizes during app packaging.
+
 ## 0.7.0
 
 - Choose save storage in Settings, including a folder in iCloud Drive or on an external disk.
