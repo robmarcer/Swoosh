@@ -2,8 +2,8 @@
 
 ## 0.7.4
 
-- Add the Swoosh No-Sale Licence 1.0: free use, forks and redistribution, including business use, with sales of original or modified software prohibited.
-- Document distribution, contribution and optional paid-service terms.
+- Adopt the standard MIT License, allowing free use, forks, modification, redistribution and commercial use, including sales of original or modified software.
+- Document MIT distribution and contribution terms.
 - Include the licence text in packaged app bundles.
 
 ## 0.7.3

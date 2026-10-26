@@ -1,76 +1,21 @@
-Swoosh No-Sale Licence 1.0
-SPDX-License-Identifier: LicenseRef-Swoosh-No-Sale-1.0
+MIT License
 
-Copyright (c) 2026 Swoosh contributors.
-Each contributor retains copyright in their contributions.
+Copyright (c) 2026 Swoosh contributors
 
-1. Scope
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-This licence applies to the Swoosh source code, executable builds,
-documentation and project artwork distributed with this notice, to the
-extent that the contributors hold the rights being licensed. These items
-are referred to below as the Software. A Modified Version is a modified
-copy or derivative work containing a substantial portion of the Software.
-Third-party material remains subject to its own terms; this licence grants
-no rights to games, keys, firmware or externally downloaded artwork.
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-2. Permissions
-
-Subject to these conditions, you may use, run, study, copy, fork, modify,
-build and distribute the Software and Modified Versions free of charge.
-These permissions include use by businesses and other organisations and
-use for commercial purposes that does not involve selling copies or rights
-to the Software or a Modified Version.
-
-You do not have to publish private changes or provide source code with a
-binary distribution. Any distribution must satisfy section 3.
-
-3. Conditions on distribution
-
-You must provide this licence and preserve applicable copyright notices
-with every distributed copy or substantial portion of the Software and
-every distributed Modified Version. You must identify material changes
-and must not present a Modified Version as an official Swoosh release.
-
-The no-sale restriction in section 4 must continue to apply to the Software
-and Modified Versions when they are redistributed. You may not relicense
-them or grant permissions that remove that restriction. Independent code
-that is not derived from the Software is outside the scope of this licence.
-
-4. No sale of the Software or Modified Versions
-
-You may not sell copies of the Software or a Modified Version, or charge
-for the right to obtain, download, install or use such a copy. This includes
-paid downloads, paid app-store listings, subscriptions that grant those
-rights, and bundles used to impose a charge for the Software or a Modified
-Version. Renaming the Software or changing its features does not remove
-this restriction.
-
-Free redistribution and optional donations are permitted. A donation must
-not be required to obtain a copy or any of the permissions in this licence.
-
-You may charge for separate services, such as optional support, training,
-hosting or development work, provided that the Software or Modified Version
-itself is supplied without a software charge under this licence. A service
-fee must not be used to disguise a charge for a copy or for those rights.
-This licence does not impose a general prohibition on commercial activity.
-
-5. Other rights
-
-These permissions are non-exclusive and conditional on compliance with
-this licence. Rights not expressly granted remain with their holders.
-No trademark rights or endorsement by the contributors are granted.
-Nothing in this licence limits rights that applicable law gives you
-independently of this licence.
-
-6. Warranty and liability
-
-To the extent permitted by applicable law, the Software is provided as is,
-without warranties of any kind, including warranties of merchantability,
-fitness for a particular purpose or non-infringement. To that same extent,
-the contributors and copyright holders are not liable for claims, damages
-or other liability arising from the Software or its use, whether in
-contract, tort or otherwise.
-
-This is a custom source-available licence. It is not the MIT licence,
-PolyForm Noncommercial, or an OSI-approved open-source licence.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

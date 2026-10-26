@@ -6,9 +6,9 @@ Swoosh turns a folder of converted Switch game apps into a fullscreen library. B
 
 ## Licence
 
-Swoosh is source-available under the [Swoosh No-Sale Licence 1.0](LICENSE), a custom licence. You may use it for free, including within a business, modify it, fork it and share original or modified versions for free. Selling Swoosh or modified versions, charging for downloads or software access, and removing the no-sale condition are prohibited. Optional donations and separate paid services are permitted when they are not disguised software charges.
+Swoosh is open source under the [MIT License](LICENSE). You may use, copy, modify, fork, distribute, sublicense and sell original or modified versions, including for commercial purposes. Keep the copyright and licence notices with copies or substantial portions of the software.
 
-Keep the licence and copyright notices with copies, identify material changes and distinguish forks from official releases. Private changes do not have to be published. This is not an OSI-approved open-source licence. Game files, keys, firmware and external artwork are not covered by this licence.
+Game files, keys, firmware and external artwork remain subject to their own rights and terms; the MIT licence does not grant rights to them.
 
 ## Requirements
 
@@ -185,6 +185,6 @@ The background return-home chord has passed a physical-controller test, with con
 
 ## Contributing
 
-Submit contributions under the Swoosh No-Sale Licence 1.0. Contributors retain their copyright; submitting a contribution does not transfer ownership.
+Submit contributions under the MIT License. Contributors retain their copyright; submitting a contribution does not transfer ownership.
 
 Keep game binaries, game data, keys, saves, personal paths, machine names and local setup details out of source control, screenshots, issues and release assets.
