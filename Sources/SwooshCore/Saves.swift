@@ -252,6 +252,24 @@ public actor SaveStore {
             try install(staged, at: target)
         }
     }
+    /// Setup must never replace a different existing protected save set implicitly.
+    public func validateSetupSource(titleID: String, app: URL, config: SaveConfiguration, activeApps: Set<String> = []) throws {
+        try coordinated {
+            guard !activeApps.contains(app.resolvingSymlinksInPath().path) else { throw SaveError.activeSession }
+            try config.validate()
+            let source = try config.source(beside: app)
+            let rootPath = root.resolvingSymlinksInPath().path
+            guard source.path != rootPath, !source.path.hasPrefix(rootPath + "/"), !rootPath.hasPrefix(source.path + "/") else { throw SaveError.unsafeTree }
+            let dir = try directory(titleID)
+            let live = dir.appendingPathComponent("live")
+            guard fm.fileExists(atPath: live.path) else { return }
+            let candidate = dir.appendingPathComponent(".setup-check-" + UUID().uuidString)
+            defer { try? fm.removeItem(at: candidate) }
+            try capture(source: source, config: config, to: candidate)
+            guard try tree(live).0 == tree(candidate).0 else { throw SaveError.locationConflict }
+        }
+    }
+
     public func prepare(titleID: String, app: URL, config: SaveConfiguration, activeApps: Set<String> = []) throws -> [String: String] {
         try coordinated { try _prepare(titleID: titleID, app: app, config: config, activeApps: activeApps) }
     }

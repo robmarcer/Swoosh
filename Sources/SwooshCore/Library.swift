@@ -6,9 +6,11 @@ public struct Game: Identifiable, Equatable, Sendable {
     public let coverURL: URL?
     public var diagnostics: [SetupDiagnostic] = []
     public var canLaunch: Bool { !diagnostics.contains { $0.blocksLaunch } }
+    public var configuredTitleID: String? = nil
+    public var titleID: String? { configuredTitleID ?? installedVersion?.titleID }
     public var installedVersion: InstalledGameVersion? = nil
     public var id: String { url.path }
-    public func withCover(_ cover: URL) -> Game { Game(url: url, name: name, coverURL: cover, diagnostics: diagnostics, installedVersion: installedVersion) }
+    public func withCover(_ cover: URL) -> Game { Game(url: url, name: name, coverURL: cover, diagnostics: diagnostics, configuredTitleID: configuredTitleID, installedVersion: installedVersion) }
 }
 
 public struct LibraryScan {
@@ -17,6 +19,18 @@ public struct LibraryScan {
 }
 
 public enum Library {
+    public static func inspect(app: URL, libraryRoot: URL) -> Game? {
+        let resolved = app.resolvingSymlinksInPath().standardizedFileURL
+        guard resolved.pathExtension.lowercased() == "app" else { return nil }
+        let info = SetupCheck.bundleInfo(resolved)
+        let title = (info?["CFBundleDisplayName"] as? String) ?? (info?["CFBundleName"] as? String) ?? app.deletingPathExtension().lastPathComponent
+        let parent = resolved.deletingLastPathComponent()
+        let cover = parent == libraryRoot.resolvingSymlinksInPath() ? nil : ["cover.jpg", "cover.png"].map { parent.appendingPathComponent($0) }.first { FileManager.default.fileExists(atPath: $0.path) }
+        return Game(url: resolved, name: title, coverURL: cover,
+                    diagnostics: SetupCheck.inspect(app: resolved, libraryRoot: libraryRoot),
+                    installedVersion: InstalledGameVersion.read(beside: resolved, libraryRoot: libraryRoot))
+    }
+
     /// Scan bundles without entering their contents or traversing unrelated data directories.
     /// Supported layouts: Switch/Game.app or Switch/Game/Game.app.
     public static func scan(_ folder: URL) -> LibraryScan {
@@ -28,14 +42,7 @@ public enum Library {
             let resolved = url.resolvingSymlinksInPath().standardizedFileURL
             guard !seen.contains(resolved.path) else { return }
             seen.insert(resolved.path)
-            let diagnostics = SetupCheck.inspect(app: resolved, libraryRoot: folder)
-            let info = SetupCheck.bundleInfo(resolved)
-            let title = (info?["CFBundleDisplayName"] as? String) ?? (info?["CFBundleName"] as? String) ?? url.deletingPathExtension().lastPathComponent
-            let parent = resolved.deletingLastPathComponent()
-            // A shared library-level cover must not become every top-level app's cover.
-            let cover = parent.standardizedFileURL == folder.standardizedFileURL ? nil : ["cover.jpg", "cover.png"].map { parent.appendingPathComponent($0) }.first { fm.fileExists(atPath: $0.path) }
-            let version = InstalledGameVersion.read(beside: resolved, libraryRoot: folder)
-            games.append(Game(url: resolved, name: title, coverURL: cover, diagnostics: diagnostics, installedVersion: version))
+            if let game = inspect(app: resolved, libraryRoot: folder) { games.append(game) }
         }
         do {
             let entries = try fm.contentsOfDirectory(at: folder, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles])

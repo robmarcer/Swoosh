@@ -24,6 +24,10 @@ import SwooshCore
         keyboard = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard !event.modifierFlags.contains(.command), let self, let model = self.model else { return event }
             if model.choosingSaveLocation { return event }
+            if NSApp.keyWindow?.firstResponder is NSTextView {
+                if event.keyCode == 53 { NSApp.keyWindow?.makeFirstResponder(nil); return nil }
+                return event
+            }
             switch event.keyCode {
             case 123: model.move(.left)
             case 124: model.move(.right)
@@ -33,6 +37,7 @@ import SwooshCore
             case 53: model.back()
             case 1: if !event.isARepeat { model.openSettings() }
             case 2: if !event.isARepeat { model.openSetup() }
+            case 34: if !event.isARepeat { model.chooseGame() }
             case 15: if !event.isARepeat { model.refreshVersions(force: true) }
             default: return event
             }

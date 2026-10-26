@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.8.0
+
+- Add a native converted-app picker with persistent references, duplicate checks and explicit title identity.
+- Add guided save protection with verified NXnative wrapper repair and explicit fixed-folder copy mode.
+- Store per-title configuration outside game installations and revalidate environment-mode launchers after updates.
+- Block unsafe or conflicting migrations, retaining originals and launcher backups.
+- Show protected, unmanaged and incomplete save states; keep guided controls reachable in shorter windows.
+- Add optional Developer ID signing and a fail-closed notarization/stapling pipeline; preview builds remain ad-hoc signed.
+
 ## 0.7.5
 
 - Keep the complete selected-game outline visible by fitting cards to the library viewport.

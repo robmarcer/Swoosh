@@ -22,7 +22,7 @@ Swoosh is a launcher, not an emulator or converter. It does not include games, k
 
 1. Download and unzip the Apple silicon release.
 2. Move `Swoosh.app` to Applications and open it.
-3. Add converted games to `~/Games/Switch/`. Swoosh creates this folder on first launch.
+3. Use **Add game** to reference a working converted app, or place game folders in `~/Games/Switch/`. Swoosh creates this library folder on first launch.
 
 The release is locally ad-hoc signed and is not notarized with an Apple Developer ID. macOS may require approval in System Settings → Privacy & Security before opening it.
 
@@ -54,6 +54,14 @@ Discovery supports apps at the library root or one folder below it. It skips hid
 
 Keep any relative app/data layout required by the converted build. Swoosh does not repair bundle paths or convert games. New game folders appear automatically.
 
+## Adding games through the interface
+
+Choose **Add game** (+), press **I**, or use **Settings → Add game…**. Select a working converted macOS `.app` in the native picker. Swoosh references its original installation, preserving relative game-data paths, and remembers it after restarting. Apps already in the library, invalid bundles and Swoosh itself are rejected. macOS may request permission for protected folders; unreadable adjacent metadata remains unknown until access is available.
+
+Title IDs come from installed metadata. If identity is missing or ambiguous, Setup asks for an explicit verified base title ID from the conversion profile before enabling save management. Names are never used as save identities, and entering an ID does not invent an installed version. Keep imported installations outside protected save storage.
+
+The guided actions support controller and keyboard navigation. Native app/folder pickers and manual title-ID entry use keyboard/mouse. While a text field is being edited, launcher shortcuts pass through to text input; Escape leaves the field.
+
 ## Setup checks
 
 Press **X** on a controller or **D** on the keyboard to inspect the selected game. Broken app metadata, missing executables and execute-permission problems block launch and stay visible in the library. Use **Recheck** after repairing the installation.
@@ -62,8 +70,11 @@ A per-game `SwooshGame.json` may declare `"requiredPaths": ["GameData/content", 
 
 ## Persistent saves and backups
 
-Save management is opt-in per game because a launcher cannot safely infer arbitrary runtime save paths. Add a `saves` entry to the per-game `SwooshGame.json` alongside verified `titleID` and `contentVersion` metadata:
+Save management is opt-in per game. Open **Setup → Protect saves…**, review the title ID and current save folder, then choose **Protect saves**. Supported NXnative shell wrappers are checked against their installed profile and data paths. When needed, Swoosh backs up an unsigned supported wrapper and changes it to preserve `DM_SAVE`. Signed or unknown wrappers are left intact; explicitly select their existing fixed save folder to use copy mode instead.
 
+Setup stops on active games, unsafe paths, unreadable saves or different existing protected progress. Failed migrations do not mark a game protected. Originals and launcher backups are retained. Per-title settings live under `~/Library/Application Support/Swoosh/GameSetup/`, outside game installations, and reconnect by title ID after reinstalling. Environment-mode wrappers are revalidated on every launch, so a game update that overrides `DM_SAVE` requires setup again. The library shows protected, unmanaged and incomplete save states.
+
+Advanced integrations can still declare a `saves` entry in `SwooshGame.json` alongside verified metadata:
 ```json
 {
   "titleID": "0100ABCDEF120000",
@@ -80,11 +91,11 @@ Save management is opt-in per game because a launcher cannot safely infer arbitr
 
 Swoosh copies and verifies the existing saves, keeping the originals, then stores authoritative saves in `<save folder>/<titleID>/live/`. The default save folder is `~/Library/Application Support/Swoosh/Saves/`. Updates, moves, removal and reinstallation of game files do not remove these saves. Reinstalling the same verified title reconnects them. Existing managed saves take precedence over a reinstalled game's initial saves; originals and conflicting copies remain recoverable.
 
-**Environment mode requires the app wrapper to honor the supplied variable.** For NXnative, Swoosh supplies `DM_SAVE` pointing to external storage. A shell wrapper must preserve an incoming value, for example `export DM_SAVE="${DM_SAVE:-$STATE_DIR/save}"`; a wrapper that unconditionally assigns DM_SAVE would bypass protection. Test the wrapper's behavior before declaring this mode. NXnative's committed `_device` companion saves are included automatically. Other runtimes can declare `companionSuffixes` explicitly.
+**Environment mode requires the app wrapper to honor the supplied variable.** For NXnative, Swoosh supplies `DM_SAVE` pointing to external storage. A shell wrapper must preserve an incoming value, for example `export DM_SAVE="${DM_SAVE:-$STATE_DIR/save}"`; a wrapper that unconditionally assigns DM_SAVE would bypass protection. Swoosh checks supported wrappers before using this mode; unsupported launchers must use explicit fixed-folder copy setup. NXnative's committed `_device` companion saves are included automatically. Other runtimes can declare `companionSuffixes` explicitly.
 
 For runtimes that require saves at their original location, use `"mode": "copy"` and omit `environmentVariable`. Swoosh backs up the external saves, records a session, copies them into the configured folder before launch, and verifies and syncs them back after exit. Interrupted sessions are recovered before the next launch. A running game, missing recovery source, or conflicting external changes blocks preparation instead of overwriting progress. Recovery copies are retained under the title's `Recovery/` folder when manual conflict resolution is needed. Uncommitted runtime work cannot be guaranteed recoverable.
 
-Press **X / D → Saves and backups** for backup history, total storage, location, and retention (5, 10 or 20 snapshots; default 10). Backups are always made before managed launches. Restore defaults to Cancel, verifies the selected backup, and backs up current saves before replacing them. Save operations block launch and launcher shutdown until complete; restore is unavailable while the game is running. Saves, backups and recovery copies remain local. Games without explicit save configuration continue to use their own runtime's save handling and are identified as unmanaged in the save screen.
+Press **X / D → Saves and backups** for backup history, total storage, location, and retention (5, 10 or 20 snapshots; default 10). Backups are always made before managed launches. Restore defaults to Cancel, verifies the selected backup, and backs up current saves before replacing them. Save operations block launch and launcher shutdown until complete; restore is unavailable while the game is running. Saves, backups and recovery copies remain in the selected storage. Games without explicit save configuration continue to use their own runtime's save handling and are identified as unmanaged in the save screen.
 
 ## Artwork
 
@@ -102,6 +113,8 @@ Your own `cover.jpg` or `cover.png` beside an app inside its individual game fol
 | Play / confirm | A (bottom face button) | Return / Space |
 | Back / cancel | B (right face button) | Escape |
 | Settings | Menu / Start | S or Command-comma |
+| Setup | X (left face button) | D |
+| Add game | Settings → Add game | I |
 | Check game updates | Y (top face button) | R |
 | Game controls during a game | Hold View + Menu for 1.5 seconds | Switch to Swoosh and choose Quit game |
 
@@ -181,10 +194,16 @@ SWOOSH_LIBRARY=/path/to/test-library SWOOSH_WINDOWED=1 build/Swoosh.app/Contents
 
 Automated tests cover discovery layouts, live add/remove scans, invalid apps, symlink deduplication, cover scoping, grid boundaries, instance locking, artwork matching, cached offline images, image validation and network backoff. Build and tests have been run on Apple silicon with macOS 26 and 27 SDKs. Runtime checks cover the native library interface, keyboard navigation, settings, broken-installation diagnostics and repairs, launch/return handling with a test app, duplicate-copy rejection, and restarting after a simulated crash. Desktop checks also cover native save-folder selection, iCloud upload status, local working saves, verified publishing after exit, backup restore with a pre-restore backup, and a complete launcher update with automatic relaunch and preserved preferences.
 
-The background return-home chord has passed a physical-controller test, with controller disconnect/reconnection observed. The restore flow was exercised with keyboard and native controls; a complete controller-only restore walkthrough, cross-Mac cloud download propagation and login startup have not been separately validated. This remains an early preview.
+Guided import and save setup have passed a desktop walkthrough using a synthetic game: native app/folder selection, manual identity entry, imported-app relocation, fixed-folder copy, verified wrapper repair, external working saves, launch/quit, and publishing changed checkpoints. Automated checks cover invalid and duplicate imports, registry corruption, unknown identity, migration conflicts/failure, active-game blocking, and reinstall persistence. Native layout renders cover first/last rows and guided screens at two-, three- and four-column sizes.
+
+The background return-home chord has passed a physical-controller test, with controller disconnect/reconnection observed. The restore flow was exercised with keyboard and native controls; a complete controller-only import/setup or restore walkthrough, cross-Mac cloud download propagation and login startup have not been separately validated. This remains an early preview.
 
 ## Contributing
 
 Submit contributions under the MIT License. Contributors retain their copyright; submitting a contribution does not transfer ownership.
 
 Keep game binaries, game data, keys, saves, personal paths, machine names and local setup details out of source control, screenshots, issues and release assets.
+
+## Developer ID distribution
+
+See [SIGNING.md](SIGNING.md) for hardened-runtime signing, notarization, stapling, Gatekeeper checks and the manual transition from ad-hoc previews. The default preview build remains ad-hoc signed.

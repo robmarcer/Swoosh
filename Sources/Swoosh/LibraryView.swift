@@ -67,6 +67,7 @@ struct LibraryView: View {
                                 Text(selected.canLaunch ? "READY TO PLAY" : "SETUP NEEDS ATTENTION").font(.system(size: 11, weight: .semibold, design: .monospaced)).tracking(2).foregroundStyle(Palette.muted)
                                 Text(selected.name).font(.system(size: 24, weight: .medium)).lineLimit(2)
                                 versionDetail(selected)
+                                Text(model.protectionStatus(selected)).font(.system(size: 12)).foregroundStyle(Palette.muted)
                                 HStack(spacing: 16) {
                                     if let artwork = model.selectedArtwork {
                                         Link("Artwork · \(artwork.sourceName)", destination: artwork.sourceURL).font(.system(size: 12)).foregroundStyle(Palette.muted)
@@ -91,7 +92,7 @@ struct LibraryView: View {
                 }.padding(.horizontal, 42).padding(.top, 30).padding(.bottom, 26)
                 if model.showingSettings { settings }
                 if model.showingSetup, let game = model.selected {
-                    overlay(title: "Setup · \(game.name)", subtitle: game.canLaunch ? "No confirmed blocking errors" : "Fix these items before launching") {
+                    guidedOverlay(title: "Setup · \(game.name)", subtitle: game.canLaunch ? "No confirmed blocking errors" : "Fix these items before launching", focus: model.setupFocus) {
                         VStack(alignment: .leading, spacing: 16) {
                             ScrollView {
                                 VStack(alignment: .leading, spacing: 16) {
@@ -101,13 +102,21 @@ struct LibraryView: View {
                                     }
                                 }
                             }.frame(maxHeight: 260)
-                            action("Recheck", selected: model.setupFocus == 0) { model.refresh() }
-                            action("Saves and backups", selected: model.setupFocus == 1) { model.openSaves() }
-                            action("Done", selected: model.setupFocus == 2) { model.showingSetup = false }
+                            Text(model.protectionStatus(game)).foregroundStyle(Palette.accent)
+                            if game.installedVersion == nil {
+                                TextField("Verified base title ID (16 hex characters)", text: $model.setupTitleID).textFieldStyle(.roundedBorder)
+                                Text("Enter the base title ID from this conversion’s profile. This does not set an installed version.").font(.system(size: 12)).foregroundStyle(Palette.muted)
+                            } else { Text("Title ID · \(game.titleID ?? "Unknown") · installed metadata").font(.system(size: 12, design: .monospaced)) }
+                            if !model.setupMessage.isEmpty { Text(model.setupMessage).font(.system(size: 12)) }
+                            action("Recheck", selected: model.setupFocus == 0) { model.refresh() }.id("guided-0")
+                            action("Protect saves…", selected: model.setupFocus == 1) { model.openSaveSetup() }.id("guided-1")
+                            action("Saves and backups", selected: model.setupFocus == 2) { model.openSaves() }.id("guided-2")
+                            action("Done", selected: model.setupFocus == 3) { model.showingSetup = false }.id("guided-3")
                             Text("↑ ↓ Select     A Confirm     B Back").foregroundStyle(Palette.muted)
                         }
                     }
                 }
+                if model.showingSaveSetup { protectionSetup }
                 if model.showingSaves { saves }
                 if model.showingUpdate, let release = model.launcherRelease {
                     overlay(title: "Update Swoosh?", subtitle: "Installed \(model.installedLauncherVersion) → \(release.tag_name)") {
@@ -173,6 +182,9 @@ struct LibraryView: View {
                 Image(systemName: model.controllerName == nil ? "gamecontroller" : "gamecontroller.fill")
                 Text(model.controllerName == nil ? "Connect a controller" : "Controller connected")
             }.font(.system(size: 13)).foregroundStyle(Palette.muted)
+            Button { model.chooseGame() } label: {
+                Image(systemName: "plus").font(.system(size: 20)).padding(12)
+            }.buttonStyle(.plain).accessibilityLabel("Add game")
             Button { model.openSettings() } label: {
                 Image(systemName: "gearshape").font(.system(size: 20)).padding(12)
             }.buttonStyle(.plain).accessibilityLabel("Settings")
@@ -251,6 +263,26 @@ struct LibraryView: View {
         }
     }
 
+    private var protectionSetup: some View {
+        guidedOverlay(title: "Protect existing saves", subtitle: selectedSaveDescription, focus: model.protectionFocus) {
+            VStack(spacing: 12) {
+                Text("Title ID · " + model.reviewedTitleID).font(.system(size: 12, design: .monospaced))
+                Text(model.setupUsesCopy ? "Fixed-folder copy: choose the game’s existing save folder. Unknown or signed launchers cannot be repaired automatically." : "Verified launcher: the game will use Swoosh’s external save path. If needed, its unsigned launcher is backed up before repair.")
+                    .font(.system(size: 13)).foregroundStyle(Palette.muted)
+                Text("Existing folder: " + (model.setupSaveSource?.path ?? "Choose the game’s existing save folder")).font(.system(size: 12)).textSelection(.enabled)
+                Text("Protected storage: " + model.saveLocation.path).font(.system(size: 12)).textSelection(.enabled)
+                Text("Existing saves are copied and verified. Originals are retained, and a backup is made before launch.").font(.system(size: 13)).foregroundStyle(Palette.muted)
+                action(model.automaticSaveSetupAvailable ? "Use verified save folder" : "Automatic setup unavailable", selected: model.protectionFocus == 0) { model.protectionAction(0) }.disabled(!model.automaticSaveSetupAvailable).id("guided-0")
+                action("Choose fixed save folder…", selected: model.protectionFocus == 1) { model.protectionAction(1) }.id("guided-1")
+                action("Protect saves", selected: model.protectionFocus == 2) { model.protectionAction(2) }.disabled(model.setupSaveSource == nil).id("guided-2")
+                action("Back", selected: model.protectionFocus == 3) { model.protectionAction(3) }.id("guided-3")
+                Text("↑ ↓ Select     A Confirm     B Back").font(.system(size: 13)).foregroundStyle(Palette.muted)
+            }
+        }
+    }
+
+    private var selectedSaveDescription: String { model.selected?.name ?? "Game save setup" }
+
     private var settings: some View {
         overlay(title: "Make yourself at home.", subtitle: "Library settings · Swoosh \(model.installedLauncherVersion)") {
             VStack(spacing: 12) {
@@ -274,7 +306,8 @@ struct LibraryView: View {
                                 action("Review launcher update", selected: model.settingsFocus == 6) { model.reviewLauncherUpdate() }
                                 Link("Download manually · GitHub releases", destination: model.releasesURL).foregroundStyle(Palette.accent)
                             }.id(6)
-                            action("Done", selected: model.settingsFocus == 7) { model.showingSettings = false }.id(7)
+                            action("Add game…", selected: model.settingsFocus == 7) { model.chooseGame() }.id(7)
+                            action("Done", selected: model.settingsFocus == 8) { model.showingSettings = false }.id(8)
                         }
                     }.frame(maxHeight: 320)
                     .onChange(of: model.settingsFocus) { _, value in withAnimation { proxy.scrollTo(value, anchor: .center) } }
@@ -296,6 +329,22 @@ struct LibraryView: View {
                 .background(selected ? Palette.accent : Palette.surface, in: RoundedRectangle(cornerRadius: 14))
                 .foregroundStyle(selected ? Palette.background : Palette.ink)
         }.buttonStyle(.plain)
+    }
+
+    private func guidedOverlay<Content: View>(title: String, subtitle: String, focus: Int, @ViewBuilder content: @escaping () -> Content) -> some View {
+        GeometryReader { geometry in
+            ZStack {
+                Palette.background.opacity(0.98).ignoresSafeArea()
+                VStack(spacing: 16) {
+                    Text(title).font(.system(size: 28, weight: .medium, design: .rounded)).multilineTextAlignment(.center)
+                    Text(subtitle).font(.system(size: 14)).foregroundStyle(Palette.muted).multilineTextAlignment(.center)
+                    ScrollViewReader { proxy in
+                        ScrollView { content().padding(6) }
+                            .onChange(of: focus) { _, value in withAnimation { proxy.scrollTo("guided-" + String(value), anchor: .center) } }
+                    }.frame(maxHeight: max(120, geometry.size.height - 230))
+                }.padding(32).frame(maxWidth: 620).frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
     }
 
     private func overlay<Content: View>(title: String, subtitle: String, @ViewBuilder content: () -> Content) -> some View {
