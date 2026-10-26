@@ -25,6 +25,7 @@ import SwooshCore
     @Published var saveMessage = ""
     private let saveStore: SaveStore
     private let savePreferences: UserDefaults
+    @Published var saveLocationMessage = "Saves and backups stay outside game files."
     @Published var saveLocation: URL
     @Published var choosingSaveLocation = false
     private var managedTitleID: String?
@@ -464,7 +465,7 @@ import SwooshCore
                     self.savePreferences.set(data, forKey: SaveLocationPreference.key)
                     self.saveLocation = destination
                     self.saveSummary = nil
-                    self.launcherUpdateMessage = "Save location changed. Existing saves and backups were verified; originals are retained."
+                    self.saveLocationMessage = "Save location changed. Existing saves and backups were verified; originals are retained."
                 } catch { self.issue = "Could not change the save location. " + error.localizedDescription }
             }
         } catch { issue = "Could not remember the selected folder. " + error.localizedDescription }

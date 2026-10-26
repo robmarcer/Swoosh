@@ -253,18 +253,25 @@ struct LibraryView: View {
                             action("Fullscreen     \(model.fullscreen ? "On" : "Off")", selected: model.settingsFocus == 0) { model.setFullscreen(!model.fullscreen) }.id(0)
                             action("Open at login     \(model.loginEnabled ? "On" : "Off")", selected: model.settingsFocus == 1) { model.toggleLogin() }.id(1)
                             action("Download artwork     \(model.artworkEnabled ? "On" : "Off")", selected: model.settingsFocus == 2) { model.toggleArtwork() }.id(2)
-                            action("Choose save folder…", selected: model.settingsFocus == 3) { model.chooseSaveLocation() }.id(3)
-                            action("Check launcher updates", selected: model.settingsFocus == 4) { model.checkLauncherUpdates(force: true) }.id(4)
+                            VStack(spacing: 8) {
+                                action("Choose save folder…", selected: model.settingsFocus == 3) { model.chooseSaveLocation() }
+                                Text(model.saveLocation.path).font(.system(size: 12)).foregroundStyle(Palette.muted).textSelection(.enabled)
+                                Text(model.saveLocationMessage).font(.system(size: 12)).foregroundStyle(Palette.muted)
+                            }.id(3)
+                            VStack(spacing: 8) {
+                                action("Check launcher updates", selected: model.settingsFocus == 4) { model.checkLauncherUpdates(force: true) }
+                                Text(model.launcherUpdateMessage).font(.system(size: 13)).foregroundStyle(Palette.muted).multilineTextAlignment(.center)
+                            }.id(4)
                             action("Release channel     \(model.includePrereleases ? "Preview + stable" : "Stable only")", selected: model.settingsFocus == 5) { model.togglePrereleases() }.id(5)
-                            action("Review launcher update", selected: model.settingsFocus == 6) { model.reviewLauncherUpdate() }.id(6)
+                            VStack(spacing: 8) {
+                                action("Review launcher update", selected: model.settingsFocus == 6) { model.reviewLauncherUpdate() }
+                                Link("Download manually · GitHub releases", destination: model.releasesURL).foregroundStyle(Palette.accent)
+                            }.id(6)
                             action("Done", selected: model.settingsFocus == 7) { model.showingSettings = false }.id(7)
                         }
                     }.frame(maxHeight: 320)
-                    .onChange(of: model.settingsFocus) { _, value in withAnimation { proxy.scrollTo(value) } }
+                    .onChange(of: model.settingsFocus) { _, value in withAnimation { proxy.scrollTo(value, anchor: .center) } }
                 }
-                Text("Saves · " + model.saveLocation.path).font(.system(size: 12)).foregroundStyle(Palette.muted).textSelection(.enabled)
-                Text(model.launcherUpdateMessage).font(.system(size: 13)).foregroundStyle(Palette.muted).multilineTextAlignment(.center)
-                Link("Download manually · GitHub releases", destination: model.releasesURL).foregroundStyle(Palette.accent)
                 Text(model.folder.path).font(.system(size: 12, design: .monospaced)).foregroundStyle(Palette.muted).padding(.top, 8).textSelection(.enabled)
                 Text("↑ ↓ Select     A Confirm     B Back").font(.system(size: 13)).foregroundStyle(Palette.muted)
             }
