@@ -12,6 +12,12 @@ import SwooshCore
     @Published var runningName: String?
     @Published var launching = false
     @Published var showingSettings = false
+    @Published var showingSetup = false
+    @Published var setupFocus = 0
+    @Published var showingHome = false
+    @Published var homeFocus = 0
+    @Published var homeProgress: Double = 0
+    @Published var runningID: String?
     @Published var showingQuit = false
     @Published var quitFocused = false
     @Published var settingsFocus = 0
@@ -35,13 +41,17 @@ import SwooshCore
     private var versionTask: Task<Void, Never>?
     private var nextVersionCheck = Date.distantPast
 
-    init() {
+    private let backgroundServices: Bool
+
+    init(library: URL? = nil, backgroundServices: Bool = true) {
+        self.backgroundServices = backgroundServices
         // Override is for development / testing; the installed app defaults to the agreed folder.
-        folder = ProcessInfo.processInfo.environment["SWOOSH_LIBRARY"].map { URL(fileURLWithPath: $0) }
+        folder = library ?? ProcessInfo.processInfo.environment["SWOOSH_LIBRARY"].map { URL(fileURLWithPath: $0) }
             ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Games/Switch", isDirectory: true)
         do { try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true) }
         catch { issue = "Could not create the game folder: \(error.localizedDescription)" }
         refresh()
+        guard backgroundServices else { return }
         timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in self?.refresh() }
         }
@@ -66,8 +76,10 @@ import SwooshCore
         if !games.contains(where: { $0.id == selectedID }) { selectedID = games.first?.id }
         if let problem = scan.issue { issue = problem }
         if running?.isTerminated == true { finishSession() }
-        loadArtwork(for: scan.games)
-        refreshVersions()
+        if backgroundServices {
+            loadArtwork(for: scan.games)
+            refreshVersions()
+        }
     }
 
     func versionStatus(for game: Game) -> VersionComparison {
@@ -136,20 +148,42 @@ import SwooshCore
     }
 
     func move(_ direction: Direction) {
+        if showingSetup {
+            if direction == .down { setupFocus = 1 }
+            if direction == .up { setupFocus = 0 }
+            return
+        }
         if showingQuit { quitFocused = direction == .right; return }
+        if showingHome {
+            if direction == .down { homeFocus = min(2, homeFocus + 1) }
+            if direction == .up { homeFocus = max(0, homeFocus - 1) }
+            return
+        }
         if showingSettings {
             if direction == .down { settingsFocus = min(3, settingsFocus + 1) }
             if direction == .up { settingsFocus = max(0, settingsFocus - 1) }
             return
         }
-        guard running == nil, !launching, !games.isEmpty else { return }
+        guard !launching, !games.isEmpty else { return }
         let index = games.firstIndex { $0.id == selectedID } ?? 0
         selectedID = games[GridNavigation.next(index, direction: direction, count: games.count, columns: columns)].id
     }
 
     func confirm() {
         if issue != nil { issue = nil; return }
+        if showingSetup {
+            if setupFocus == 0 { refresh() } else { showingSetup = false }
+            return
+        }
         if showingQuit { quitFocused ? quitGame() : resume(); return }
+        if showingHome {
+            switch homeFocus {
+            case 0: resume()
+            case 1: showingHome = false
+            default: showingQuit = true; quitFocused = false
+            }
+            return
+        }
         if showingSettings {
             switch settingsFocus {
             case 0: setFullscreen(!fullscreen)
@@ -159,15 +193,26 @@ import SwooshCore
             }
             return
         }
-        if running != nil { resume(); return }
+        if running != nil {
+            if let selected, selected.id == runningID { resume() }
+            else { issue = "Quit the running game before opening another one." }
+            return
+        }
         launchSelected()
     }
 
     func back() {
         if issue != nil { issue = nil }
-        else if showingQuit { resume() }
+        else if showingSetup { showingSetup = false }
+        else if showingQuit { showingQuit = false }
+        else if showingHome { resume() }
         else if showingSettings { showingSettings = false }
         else if running != nil { resume() }
+    }
+
+    func openSetup() {
+        guard !launching, !showingHome, !showingQuit, !showingSettings else { return }
+        showingSetup.toggle(); setupFocus = 0
     }
 
     func openSettings() {
@@ -177,6 +222,7 @@ import SwooshCore
 
     func launchSelected() {
         guard let game = selected, running == nil, !launching else { return }
+        guard game.canLaunch else { showingSetup = true; setupFocus = 0; return }
         launching = true; runningName = game.name; issue = nil
         let config = NSWorkspace.OpenConfiguration()
         config.activates = true
@@ -193,6 +239,7 @@ import SwooshCore
                     return
                 }
                 self.running = app
+                self.runningID = game.id
                 self.didLaunch = true
                 if app.isTerminated { self.finishSession() }
             }
@@ -200,14 +247,14 @@ import SwooshCore
     }
 
     func requestHome() {
-        guard running != nil, !launching, !showingQuit else { return }
-        showingQuit = true; quitFocused = false
+        guard running != nil, !launching else { return }
+        homeProgress = 0; showingHome = true; showingQuit = false; homeFocus = 0; quitFocused = false
         NSApp.activate(ignoringOtherApps: true)
-        NSApp.windows.first?.makeKeyAndOrderFront(nil)
+        NSApp.windows.first(where: { !($0 is NSPanel) })?.makeKeyAndOrderFront(nil)
     }
 
     func resume() {
-        showingQuit = false
+        showingQuit = false; showingHome = false
         running?.activate(options: [])
     }
 
@@ -221,13 +268,13 @@ import SwooshCore
     }
 
     func finishSession() {
-        running = nil; runningName = nil; showingQuit = false; launching = false
+        running = nil; runningName = nil; runningID = nil; showingHome = false; homeProgress = 0; showingQuit = false; launching = false
         if didLaunch { NSApp.activate(ignoringOtherApps: true) }
     }
 
     func setFullscreen(_ enabled: Bool) {
         fullscreen = enabled; UserDefaults.standard.set(enabled, forKey: "fullscreen")
-        guard let window = NSApp.windows.first else { return }
+        guard let window = NSApp.windows.first(where: { !($0 is NSPanel) }) else { return }
         if window.styleMask.contains(.fullScreen) != enabled { window.toggleFullScreen(nil) }
     }
 

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.0
+
+- Keep broken installations visible with actionable, controller-accessible setup checks.
+- Validate declared required data paths and recheck repairs without restarting.
+
+- Add controller home controls for resume, return to library, and confirmed normal quit.
+- Show non-activating hold progress above fullscreen games.
+- Keep the running game visible in the library and prevent overlapping launches.
+- Require neutral controller input after focus changes and reconnections.
+
 ## 0.3.1
 
 - Show installed and latest known versions together on game cards and in selection details.

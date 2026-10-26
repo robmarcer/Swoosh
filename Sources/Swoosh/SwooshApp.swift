@@ -44,17 +44,19 @@ struct SwooshApp: App {
 @MainActor final class AppDelegate: NSObject, NSApplicationDelegate {
     let model = AppModel()
     private var input: ControllerInput?
+    private var homeFeedback: HomeProgressPanel?
     private var prepared = false
     private var activationObserver: NSObjectProtocol?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
         input = ControllerInput(model: model)
+        homeFeedback = HomeProgressPanel(model: model)
         NSApp.activate(ignoringOtherApps: true)
         activationObserver = DistributedNotificationCenter.default().addObserver(forName: Notification.Name("dev.swoosh.launcher.activate"), object: nil, queue: .main) { _ in
             Task { @MainActor in
                 NSApp.activate(ignoringOtherApps: true)
-                NSApp.windows.first?.makeKeyAndOrderFront(nil)
+                NSApp.windows.first(where: { !($0 is NSPanel) })?.makeKeyAndOrderFront(nil)
             }
         }
     }
@@ -62,7 +64,7 @@ struct SwooshApp: App {
     func prepareWindow() {
         guard !prepared else { return }; prepared = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [self] in
-            guard let window = NSApp.windows.first else { return }
+            guard let window = NSApp.windows.first(where: { !($0 is NSPanel) }) else { return }
             window.title = "Swoosh"
             window.isReleasedWhenClosed = false
             window.collectionBehavior.insert(.fullScreenPrimary)

@@ -4,9 +4,11 @@ public struct Game: Identifiable, Equatable, Sendable {
     public let url: URL
     public let name: String
     public let coverURL: URL?
+    public var diagnostics: [SetupDiagnostic] = []
+    public var canLaunch: Bool { !diagnostics.contains { $0.blocksLaunch } }
     public var installedVersion: InstalledGameVersion? = nil
     public var id: String { url.path }
-    public func withCover(_ cover: URL) -> Game { Game(url: url, name: name, coverURL: cover, installedVersion: installedVersion) }
+    public func withCover(_ cover: URL) -> Game { Game(url: url, name: name, coverURL: cover, diagnostics: diagnostics, installedVersion: installedVersion) }
 }
 
 public struct LibraryScan {
@@ -24,20 +26,16 @@ public enum Library {
         var seen = Set<String>()
         func add(_ url: URL) {
             let resolved = url.resolvingSymlinksInPath().standardizedFileURL
-            guard !seen.contains(resolved.path),
-                  let data = try? Data(contentsOf: resolved.appendingPathComponent("Contents/Info.plist")),
-                  let info = (try? PropertyListSerialization.propertyList(from: data, format: nil)) as? [String: Any],
-                  let executable = info["CFBundleExecutable"] as? String,
-                  !executable.isEmpty, !executable.contains("/"), executable != ".", executable != "..",
-                  fm.isExecutableFile(atPath: resolved.appendingPathComponent("Contents/MacOS").appendingPathComponent(executable).path)
-            else { return }
+            guard !seen.contains(resolved.path) else { return }
             seen.insert(resolved.path)
-            let title = (info["CFBundleDisplayName"] as? String) ?? (info["CFBundleName"] as? String) ?? url.deletingPathExtension().lastPathComponent
+            let diagnostics = SetupCheck.inspect(app: resolved, libraryRoot: folder)
+            let info = SetupCheck.bundleInfo(resolved)
+            let title = (info?["CFBundleDisplayName"] as? String) ?? (info?["CFBundleName"] as? String) ?? url.deletingPathExtension().lastPathComponent
             let parent = resolved.deletingLastPathComponent()
             // A shared library-level cover must not become every top-level app's cover.
             let cover = parent.standardizedFileURL == folder.standardizedFileURL ? nil : ["cover.jpg", "cover.png"].map { parent.appendingPathComponent($0) }.first { fm.fileExists(atPath: $0.path) }
             let version = InstalledGameVersion.read(beside: resolved, libraryRoot: folder)
-            games.append(Game(url: resolved, name: title, coverURL: cover, installedVersion: version))
+            games.append(Game(url: resolved, name: title, coverURL: cover, diagnostics: diagnostics, installedVersion: version))
         }
         do {
             let entries = try fm.contentsOfDirectory(at: folder, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles])

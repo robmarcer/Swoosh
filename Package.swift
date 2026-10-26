@@ -8,6 +8,7 @@ let package = Package(
     targets: [
         .target(name: "SwooshCore"),
         .executableTarget(name: "Swoosh", dependencies: ["SwooshCore"]),
-        .testTarget(name: "SwooshCoreTests", dependencies: ["SwooshCore"])
+        .testTarget(name: "SwooshCoreTests", dependencies: ["SwooshCore"]),
+        .testTarget(name: "SwooshAppTests", dependencies: ["Swoosh"])
     ]
 )

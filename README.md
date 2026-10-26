@@ -44,9 +44,15 @@ Swoosh does not obtain games, extract keys, convert archives or apply game updat
   Orbit.app           # self-contained apps can live at the top level
 ```
 
-Discovery supports apps at the library root or one folder below it. It skips hidden entries, broken bundles and non-executable apps, and does not descend into game data. Symlinks to app bundles are supported and deduplicated. The library refreshes every two seconds and preserves the selected game when possible.
+Discovery supports apps at the library root or one folder below it. It skips hidden entries, shows broken bundles and non-executable apps with setup diagnostics, and does not descend into game data. Symlinks to app bundles are supported and deduplicated. The library refreshes every two seconds and preserves the selected game when possible.
 
-Keep any relative app/data layout required by the converted build. Swoosh does not relocate saves, repair bundle paths, or convert games. New game folders appear automatically.
+Keep any relative app/data layout required by the converted build. Swoosh does not repair bundle paths or convert games. New game folders appear automatically.
+
+## Setup checks
+
+Press **X** on a controller or **D** on the keyboard to inspect the selected game. Broken app metadata, missing executables and execute-permission problems block launch and stay visible in the library. Use **Recheck** after repairing the installation.
+
+A per-game `SwooshGame.json` may declare `"requiredPaths": ["GameData/content", "GameData/profile"]`. These paths are relative to the manifest and must stay inside the individual game folder. Missing or unreadable declared paths block launch. Without declared requirements, data compatibility is explicitly unverified; Swoosh does not guess a runtime layout.
 
 ## Artwork
 
@@ -65,9 +71,9 @@ Your own `cover.jpg` or `cover.png` beside an app inside its individual game fol
 | Back / cancel | B (right face button) | Escape |
 | Settings | Menu / Start | S or Command-comma |
 | Check game updates | Y (top face button) | R |
-| Return-home confirmation during a game | Hold View + Menu for 1.5 seconds | Switch to Swoosh and choose Quit game |
+| Game controls during a game | Hold View + Menu for 1.5 seconds | Switch to Swoosh and choose Quit game |
 
-The home confirmation defaults to **Keep playing**. Move right to select **Quit game**, then confirm. Save in the game before quitting. Swoosh sends a normal macOS quit request and never force-kills a game. The home chord requires a controller exposing both Menu and Options/View buttons; the foreground game also receives those buttons.
+Holding the home shortcut shows progress without taking focus from the game, then opens **Resume game**, **Return to library**, and **Quit game…**. Resume is selected by default. Return to library leaves the game running with a visible resume control; another game cannot start until it exits. Quit opens a second confirmation with **Keep playing** selected by default. Save in the game before quitting. Swoosh sends a normal macOS quit request and never force-kills a game. The home chord requires a controller exposing both Menu and Options/View buttons; the foreground game also receives those buttons.
 
 Swoosh passes `DM_FULLSCREEN=1` to launched games. NXnative builds supporting that flag start fullscreen; other apps control their own display mode. It tracks the launched application and brings the library forward when it exits. It does not distinguish normal exits from crashes or resume unsaved progress.
 

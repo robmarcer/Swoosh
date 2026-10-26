@@ -20,6 +20,14 @@ struct LibraryView: View {
                 Palette.background.ignoresSafeArea()
                 VStack(alignment: .leading, spacing: 28) {
                     header
+                    if model.running != nil {
+                        HStack {
+                            Label("\(model.runningName ?? "Game") is running", systemImage: "play.circle.fill")
+                            Spacer()
+                            Button("Resume") { model.resume() }
+                            Button("Game controls") { model.requestHome() }
+                        }.padding(14).background(Palette.surface, in: RoundedRectangle(cornerRadius: 14))
+                    }
                     HStack(alignment: .lastTextBaseline) {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("YOUR LIBRARY").font(.system(size: 12, weight: .semibold, design: .monospaced)).tracking(3).foregroundStyle(Palette.accent)
@@ -49,7 +57,7 @@ struct LibraryView: View {
                     if let selected = model.selected {
                         HStack {
                             VStack(alignment: .leading, spacing: 6) {
-                                Text("READY TO PLAY").font(.system(size: 11, weight: .semibold, design: .monospaced)).tracking(2).foregroundStyle(Palette.muted)
+                                Text(selected.canLaunch ? "READY TO PLAY" : "SETUP NEEDS ATTENTION").font(.system(size: 11, weight: .semibold, design: .monospaced)).tracking(2).foregroundStyle(Palette.muted)
                                 Text(selected.name).font(.system(size: 24, weight: .medium)).lineLimit(2)
                                 versionDetail(selected)
                                 HStack(spacing: 16) {
@@ -66,20 +74,41 @@ struct LibraryView: View {
                             }
                             Spacer(minLength: 20)
                             Button { model.confirm() } label: {
-                                HStack(spacing: 12) { ButtonGlyph(label: "A"); Text("Play").fontWeight(.semibold) }
+                                HStack(spacing: 12) { ButtonGlyph(label: "A"); Text(!selected.canLaunch ? "Check setup" : (model.runningID == selected.id ? "Resume" : "Play")).fontWeight(.semibold) }
                                     .padding(.horizontal, 26).padding(.vertical, 15)
                                     .foregroundStyle(Palette.background).background(Palette.accent, in: Capsule())
-                            }.buttonStyle(.plain).disabled(model.launching || model.running != nil)
+                            }.buttonStyle(.plain).disabled(model.launching || (model.running != nil && model.selected?.id != model.runningID))
                         }
                     }
                     footer
                 }.padding(.horizontal, 42).padding(.top, 30).padding(.bottom, 26)
                 if model.showingSettings { settings }
+                if model.showingSetup, let game = model.selected {
+                    overlay(title: "Setup · \(game.name)", subtitle: game.canLaunch ? "No confirmed blocking errors" : "Fix these items before launching") {
+                        VStack(alignment: .leading, spacing: 16) {
+                            ScrollView {
+                                VStack(alignment: .leading, spacing: 16) {
+                                    ForEach(Array(game.diagnostics.enumerated()), id: \.offset) { _, diagnostic in
+                                        Label(diagnostic.message, systemImage: diagnostic.blocksLaunch ? "exclamationmark.triangle.fill" : "info.circle")
+                                            .foregroundStyle(diagnostic.blocksLaunch ? Color.orange : Palette.muted)
+                                    }
+                                }
+                            }.frame(maxHeight: 260)
+                            action("Recheck", selected: model.setupFocus == 0) { model.refresh() }
+                            action("Done", selected: model.setupFocus == 1) { model.showingSetup = false }
+                            Text("↑ ↓ Select     A Confirm     B Back").foregroundStyle(Palette.muted)
+                        }
+                    }
+                }
                 if model.launching { overlay(title: "Opening \(model.runningName ?? "game")", subtitle: "Your game will open fullscreen.") { ProgressView().controlSize(.large) } }
-                if model.running != nil && !model.showingQuit {
-                    overlay(title: model.runningName ?? "Game running", subtitle: "Hold View + Menu for 1.5 seconds in a game to return here.") {
-                        action("Return to game", selected: true) { model.resume() }
-                        action("Quit game…", selected: false) { model.requestHome() }
+                if model.showingHome {
+                    overlay(title: model.runningName ?? "Game controls", subtitle: "Your game is still running. Return whenever you’re ready.") {
+                        VStack(spacing: 12) {
+                            action("Resume game", selected: model.homeFocus == 0) { model.resume() }
+                            action("Return to library", selected: model.homeFocus == 1) { model.showingHome = false }
+                            action("Quit game…", selected: model.homeFocus == 2) { model.showingQuit = true; model.quitFocused = false }
+                            Text("↑ ↓ Select     A Confirm     B Resume").foregroundStyle(Palette.muted)
+                        }
                     }
                 }
                 if model.showingQuit {
@@ -123,6 +152,7 @@ struct LibraryView: View {
             hint("A", "Play")
             hint("≡", "Settings")
             hint("Y", "Check updates")
+            hint("X", "Setup")
             Spacer()
             Text(model.checkingVersions ? "Checking game releases…" : (model.fetchingArtwork ? "Finding artwork…" : "Library updates automatically")).font(.system(size: 12)).foregroundStyle(Palette.muted)
         }.padding(.top, 18).overlay(alignment: .top) { Rectangle().fill(Palette.muted.opacity(0.18)).frame(height: 1) }
@@ -237,6 +267,7 @@ private struct GameTile: View {
                                 .background(Color(red: 1, green: 0.78, blue: 0.35), in: Capsule()).padding(12)
                         }
                     }
+                if !game.canLaunch { Label("Check setup", systemImage: "exclamationmark.triangle.fill").font(.system(size: 12, weight: .semibold)).foregroundStyle(.orange) }
                 Text(game.name).font(.system(size: 15, weight: selected ? .semibold : .regular)).lineLimit(2).multilineTextAlignment(.leading)
                 if let installed = game.installedVersion {
                     HStack(spacing: 8) {

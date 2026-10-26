@@ -29,7 +29,8 @@ final class LibraryTests: XCTestCase {
         try Data().write(to: root.appendingPathComponent("Other.nsp"))
         let result = Library.scan(root)
         XCTAssertNil(result.issue)
-        XCTAssertEqual(result.games.map(\.name), ["Aurora", "Orbit"])
+        XCTAssertEqual(result.games.map(\.name), ["Aurora", "Broken", "Orbit"])
+        XCTAssertFalse(result.games.first { $0.name == "Broken" }!.canLaunch)
     }
 
     func testRefreshReflectsAddsAndRemovals() throws {
