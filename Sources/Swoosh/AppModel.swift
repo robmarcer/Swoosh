@@ -4,6 +4,15 @@ import ServiceManagement
 import SwooshCore
 
 @MainActor final class AppModel: ObservableObject {
+    @Published var showingSaves = false
+    @Published var saveSummary: SaveSummary?
+    @Published var saveFocus = 0
+    @Published var restoreCandidate: SaveBackup?
+    @Published var restoreFocused = false
+    @Published var saving = false
+    @Published var saveMessage = ""
+    private let saveStore = SaveStore()
+    private var managedTitleID: String?
     @Published var games: [Game] = []
     @Published var selectedID: String?
     @Published var controllerName: String?
@@ -148,9 +157,16 @@ import SwooshCore
     }
 
     func move(_ direction: Direction) {
+        if saving { return }
+        if restoreCandidate != nil { restoreFocused = direction == .right; return }
+        if showingSaves {
+            if direction == .down { saveFocus = min((saveSummary?.backups.count ?? 0) + 1, saveFocus + 1) }
+            if direction == .up { saveFocus = max(0, saveFocus - 1) }
+            return
+        }
         if showingSetup {
-            if direction == .down { setupFocus = 1 }
-            if direction == .up { setupFocus = 0 }
+            if direction == .down { setupFocus = min(2, setupFocus + 1) }
+            if direction == .up { setupFocus = max(0, setupFocus - 1) }
             return
         }
         if showingQuit { quitFocused = direction == .right; return }
@@ -170,9 +186,23 @@ import SwooshCore
     }
 
     func confirm() {
+        guard !saving else { return }
         if issue != nil { issue = nil; return }
+        if let candidate = restoreCandidate {
+            if restoreFocused { restoreBackup(candidate) } else { restoreCandidate = nil }
+            return
+        }
+        if showingSaves {
+            if saveSummary == nil { showingSaves = false; return }
+            if saveFocus == 0 { cycleRetention() }
+            else if saveFocus == 1 { showingSaves = false }
+            else if let backups = saveSummary?.backups, backups.indices.contains(saveFocus - 2) {
+                restoreCandidate = backups[saveFocus - 2]; restoreFocused = false
+            }
+            return
+        }
         if showingSetup {
-            if setupFocus == 0 { refresh() } else { showingSetup = false }
+            if setupFocus == 0 { refresh() } else if setupFocus == 1 { openSaves() } else { showingSetup = false }
             return
         }
         if showingQuit { quitFocused ? quitGame() : resume(); return }
@@ -202,7 +232,10 @@ import SwooshCore
     }
 
     func back() {
+        guard !saving else { return }
         if issue != nil { issue = nil }
+        else if restoreCandidate != nil { restoreCandidate = nil }
+        else if showingSaves { showingSaves = false }
         else if showingSetup { showingSetup = false }
         else if showingQuit { showingQuit = false }
         else if showingHome { resume() }
@@ -211,38 +244,105 @@ import SwooshCore
     }
 
     func openSetup() {
-        guard !launching, !showingHome, !showingQuit, !showingSettings else { return }
+        guard !launching, !saving, !showingSaves, !showingHome, !showingQuit, !showingSettings else { return }
         showingSetup.toggle(); setupFocus = 0
     }
 
     func openSettings() {
-        guard running == nil, !launching else { return }
+        guard running == nil, !launching, !saving else { return }
         showingSettings.toggle(); settingsFocus = 0
     }
 
+    private var activeGamePaths: Set<String> {
+        Set(NSWorkspace.shared.runningApplications.compactMap { $0.bundleURL?.resolvingSymlinksInPath().path })
+    }
+
     func launchSelected() {
-        guard let game = selected, running == nil, !launching else { return }
+        guard let game = selected, running == nil, !launching, !saving else { return }
         guard game.canLaunch else { showingSetup = true; setupFocus = 0; return }
         launching = true; runningName = game.name; issue = nil
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                var environment = ["DM_FULLSCREEN": "1"]
+                if let config = try SaveConfiguration.read(game: game, libraryRoot: self.folder) {
+                    guard let id = game.installedVersion?.titleID else { throw SaveError.missingIdentity }
+                    let values = try await self.saveStore.prepare(titleID: id, app: game.url, config: config, activeApps: self.activeGamePaths)
+                    environment.merge(values) { _, value in value }
+                    self.managedTitleID = id
+                }
+                self.openGame(game, environment: environment)
+            } catch {
+                self.launching = false; self.runningName = nil
+                self.issue = "Save preparation stopped the launch. " + error.localizedDescription
+            }
+        }
+    }
+
+    private func openGame(_ game: Game, environment: [String: String]) {
         let config = NSWorkspace.OpenConfiguration()
-        config.activates = true
-        // Scoped to this game process; no global environment changes.
-        config.environment = ["DM_FULLSCREEN": "1"]
+        config.activates = true; config.environment = environment
         NSWorkspace.shared.openApplication(at: game.url, configuration: config) { [weak self] app, error in
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 self.launching = false
                 guard let app, error == nil else {
-                    self.runningName = nil
-                    self.issue = "Could not open \(game.name). \(error?.localizedDescription ?? "Try opening the game directly to check its installation.")"
+                    self.finishSession()
+                    self.issue = "Could not open \(game.name). \(error?.localizedDescription ?? "Open Setup to recheck its installation, or test it directly.")"
                     NSApp.activate(ignoringOtherApps: true)
                     return
                 }
-                self.running = app
-                self.runningID = game.id
-                self.didLaunch = true
+                self.running = app; self.runningID = game.id; self.didLaunch = true
                 if app.isTerminated { self.finishSession() }
             }
+        }
+    }
+
+    func openSaves() {
+        guard running == nil, !launching, !saving else { issue = "Exit the running game before managing saves."; return }
+        showingSaves = true; saveFocus = 0; saveSummary = nil
+        guard let game = selected, let id = game.installedVersion?.titleID else {
+            saveMessage = "Add verified title metadata before managing saves."; return
+        }
+        saving = true
+        Task { @MainActor in
+            defer { self.saving = false }
+            do {
+                guard try SaveConfiguration.read(game: game, libraryRoot: self.folder) != nil else {
+                    self.saveMessage = "Save management is not configured. Add a saves entry to this game’s SwooshGame.json using a verified save path. See the README for the runtime contract."
+                    return
+                }
+                try await self.saveStore.recover(titleID: id, activeApps: self.activeGamePaths)
+                self.saveSummary = try await self.saveStore.summary(titleID: id)
+                self.saveMessage = "Saves stay outside the game installation. Backups are made before each managed launch."
+            } catch { self.saveMessage = error.localizedDescription }
+        }
+    }
+
+    func cycleRetention() {
+        guard !saving, let id = selected?.installedVersion?.titleID, let summary = saveSummary else { return }
+        let count = summary.retention == 5 ? 10 : (summary.retention == 10 ? 20 : 5)
+        saving = true
+        Task { @MainActor in
+            defer { self.saving = false }
+            do {
+                try await self.saveStore.setRetention(titleID: id, count: count)
+                self.saveSummary = try await self.saveStore.summary(titleID: id)
+            } catch { self.issue = error.localizedDescription }
+        }
+    }
+
+    func restoreBackup(_ item: SaveBackup) {
+        guard running == nil, !launching, !saving, let id = selected?.installedVersion?.titleID else { return }
+        guard let game = selected, !activeGamePaths.contains(game.url.resolvingSymlinksInPath().path) else { issue = SaveError.activeSession.localizedDescription; return }
+        saving = true; restoreCandidate = nil
+        Task { @MainActor in
+            defer { self.saving = false }
+            do {
+                try await self.saveStore.restore(titleID: id, backupID: item.id, activeApps: self.activeGamePaths)
+                self.saveSummary = try await self.saveStore.summary(titleID: id)
+                self.saveMessage = "Backup restored. The previous saves were backed up first."
+            } catch { self.issue = error.localizedDescription }
         }
     }
 
@@ -270,6 +370,14 @@ import SwooshCore
     func finishSession() {
         running = nil; runningName = nil; runningID = nil; showingHome = false; homeProgress = 0; showingQuit = false; launching = false
         if didLaunch { NSApp.activate(ignoringOtherApps: true) }
+        if let id = managedTitleID {
+            managedTitleID = nil; saving = true
+            Task { @MainActor in
+                defer { self.saving = false }
+                do { try await self.saveStore.recover(titleID: id, activeApps: self.activeGamePaths) }
+                catch { self.issue = "Save recovery needs attention. " + error.localizedDescription }
+            }
+        }
     }
 
     func setFullscreen(_ enabled: Bool) {

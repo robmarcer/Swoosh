@@ -95,8 +95,19 @@ struct LibraryView: View {
                                 }
                             }.frame(maxHeight: 260)
                             action("Recheck", selected: model.setupFocus == 0) { model.refresh() }
-                            action("Done", selected: model.setupFocus == 1) { model.showingSetup = false }
+                            action("Saves and backups", selected: model.setupFocus == 1) { model.openSaves() }
+                            action("Done", selected: model.setupFocus == 2) { model.showingSetup = false }
                             Text("↑ ↓ Select     A Confirm     B Back").foregroundStyle(Palette.muted)
+                        }
+                    }
+                }
+                if model.showingSaves { saves }
+                if model.saving { overlay(title: "Protecting your saves", subtitle: "Please wait until the operation finishes.") { ProgressView() } }
+                if let item = model.restoreCandidate {
+                    overlay(title: "Restore this backup?", subtitle: item.date.formatted() + " · Current saves will be backed up before replacement.") {
+                        HStack {
+                            action("Cancel", selected: !model.restoreFocused) { model.restoreCandidate = nil }
+                            action("Restore", selected: model.restoreFocused) { model.restoreBackup(item) }
                         }
                     }
                 }
@@ -188,6 +199,34 @@ struct LibraryView: View {
             Text("Add a converted game and it will appear here.").foregroundStyle(Palette.muted)
             Text(model.folder.path).font(.system(size: 13, design: .monospaced)).foregroundStyle(Palette.muted).textSelection(.enabled)
         }.multilineTextAlignment(.center).padding(28)
+    }
+
+    private var saves: some View {
+        overlay(title: "Saves and backups", subtitle: model.saveMessage) {
+            VStack(spacing: 12) {
+                if let summary = model.saveSummary {
+                    Text(summary.location.path).font(.system(size: 12, design: .monospaced)).textSelection(.enabled)
+                    Text(ByteCountFormatter.string(fromByteCount: summary.bytes, countStyle: .file) + " stored locally").foregroundStyle(Palette.muted)
+                    action("Keep \(summary.retention) backups", selected: model.saveFocus == 0) { model.cycleRetention() }
+                    action("Done", selected: model.saveFocus == 1) { model.showingSaves = false }
+                    ScrollViewReader { proxy in
+                        ScrollView {
+                            VStack(spacing: 10) {
+                                ForEach(Array(summary.backups.enumerated()), id: \.element.id) { index, item in
+                                    action(item.date.formatted() + " · " + item.reason, selected: model.saveFocus == index + 2) {
+                                        model.restoreCandidate = item; model.restoreFocused = false
+                                    }.id(index + 2)
+                                }
+                            }
+                        }.frame(maxHeight: 220)
+                        .onChange(of: model.saveFocus) { _, value in proxy.scrollTo(value) }
+                    }
+                } else {
+                    action("Done", selected: true) { model.showingSaves = false }
+                }
+                Text("↑ ↓ Select     A Confirm     B Back").foregroundStyle(Palette.muted)
+            }
+        }
     }
 
     private var settings: some View {

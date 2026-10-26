@@ -54,6 +54,32 @@ Press **X** on a controller or **D** on the keyboard to inspect the selected gam
 
 A per-game `SwooshGame.json` may declare `"requiredPaths": ["GameData/content", "GameData/profile"]`. These paths are relative to the manifest and must stay inside the individual game folder. Missing or unreadable declared paths block launch. Without declared requirements, data compatibility is explicitly unverified; Swoosh does not guess a runtime layout.
 
+## Persistent saves and backups
+
+Save management is opt-in per game because a launcher cannot safely infer arbitrary runtime save paths. Add a `saves` entry to the per-game `SwooshGame.json` alongside verified `titleID` and `contentVersion` metadata:
+
+```json
+{
+  "titleID": "0100ABCDEF120000",
+  "contentVersion": 65536,
+  "saves": {
+    "mode": "environment",
+    "path": "~/Library/Application Support/ExampleRuntime/Orbit/save",
+    "environmentVariable": "DM_SAVE"
+  }
+}
+```
+
+`path` explicitly identifies the existing save directory for migration. It can be absolute, start with `~/`, or be relative to the per-game manifest. The source folder must exist for the first migration; create an empty save folder explicitly for a new game. Do not point it at a game-data root or unrelated folder. A verified title ID is required; names are display labels, never save identities.
+
+Swoosh copies and verifies the existing saves, keeping the originals, then stores authoritative saves in `~/Library/Application Support/Swoosh/Saves/<titleID>/live/`. Updates, moves, removal and reinstallation of game files do not remove these saves. Reinstalling the same verified title reconnects them. Existing managed saves take precedence over a reinstalled game's initial saves; originals and conflicting copies remain recoverable.
+
+**Environment mode requires the app wrapper to honor the supplied variable.** For NXnative, Swoosh supplies `DM_SAVE` pointing to external storage. A shell wrapper must preserve an incoming value, for example `export DM_SAVE="${DM_SAVE:-$STATE_DIR/save}"`; a wrapper that unconditionally assigns DM_SAVE would bypass protection. Test the wrapper's behavior before declaring this mode. NXnative's committed `_device` companion saves are included automatically. Other runtimes can declare `companionSuffixes` explicitly.
+
+For runtimes that require saves at their original location, use `"mode": "copy"` and omit `environmentVariable`. Swoosh backs up the external saves, records a session, copies them into the configured folder before launch, and verifies and syncs them back after exit. Interrupted sessions are recovered before the next launch. A running game, missing recovery source, or conflicting external changes blocks preparation instead of overwriting progress. Recovery copies are retained under the title's `Recovery/` folder when manual conflict resolution is needed. Uncommitted runtime work cannot be guaranteed recoverable.
+
+Press **X / D → Saves and backups** for backup history, total storage, location, and retention (5, 10 or 20 snapshots; default 10). Backups are always made before managed launches. Restore defaults to Cancel, verifies the selected backup, and backs up current saves before replacing them. Save operations block launch and launcher shutdown until complete; restore is unavailable while the game is running. Saves, backups and recovery copies remain local. Games without explicit save configuration continue to use their own runtime's save handling and are identified as unmanaged in the save screen.
+
 ## Artwork
 
 Swoosh first checks Nintendo’s game catalogue for original artwork with at least 1000 pixels on each side. It verifies the downloaded dimensions and upgrades older low-resolution cache entries automatically. It falls back to Wikipedia’s [PageImages API](https://www.mediawiki.org/wiki/API:Pageimages) when an original is unavailable. Matching requires an exact game title, a unique exact Nintendo subtitle, or an explicit Wikipedia redirect; unrelated search results are ignored. Some titles may not have a matching image.

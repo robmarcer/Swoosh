@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.0
+
+- Store managed saves outside game installations, keyed by verified title IDs.
+- Support direct runtime save paths and journaled copy-in/copy-back recovery.
+- Verify migrations and snapshots, preserve conflicting copies, and block unsafe launches.
+- Add controller-accessible backups, confirmed restore, storage totals and configurable retention.
+- Preserve NXnative device saves alongside primary saves when using DM_SAVE.
+
 ## 0.4.0
 
 - Keep broken installations visible with actionable, controller-accessible setup checks.
