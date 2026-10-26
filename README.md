@@ -137,7 +137,7 @@ Swoosh first recovers pending sessions, copies and verifies existing saves and b
 
 For a custom location, games use a local working copy under `~/Library/Application Support/Swoosh/SaveSessions/<titleID>/`. Committed saves are verified and copied back after exit. Session journals stay local; uncommitted runtime work is not published. On a crash, recovery happens before another launch. If the stored copy changed during play, both versions are retained and launch is blocked for manual conflict resolution. Backups remain in the chosen folder.
 
-For iCloud Drive, use Finder's [Download Now / Keep Downloaded controls](https://support.apple.com/en-gb/guide/mac-help/mchl1a02d711/mac) and allow sync to finish before playing on another Mac. Swoosh coordinates storage access with macOS, requests downloads for evicted files, and blocks operations on undownloaded, conflicting or unavailable storage. It does not silently fall back to empty local saves. iCloud controls upload timing; play on one Mac at a time. Other sync providers must keep the folder locally readable and writable. Live iCloud synchronization and the native picker still require hands-on validation.
+For iCloud Drive, use Finder's [Download Now / Keep Downloaded controls](https://support.apple.com/en-gb/guide/mac-help/mchl1a02d711/mac) and allow sync to finish before playing on another Mac. Swoosh coordinates storage access with macOS, requests downloads for evicted files, and blocks operations on undownloaded, conflicting or unavailable storage. It does not silently fall back to empty local saves. iCloud controls upload timing; play on one Mac at a time. Other sync providers must keep the folder locally readable and writable. Desktop validation covers native folder selection, stored-folder persistence, save publishing, backup restore, and macOS reporting the synthetic stored file uploaded to iCloud without unresolved conflicts. Cross-Mac download propagation has not been verified.
 
 ## Launcher updates
 
@@ -173,9 +173,9 @@ SWOOSH_LIBRARY=/path/to/test-library SWOOSH_WINDOWED=1 build/Swoosh.app/Contents
 
 ## Validation and limits
 
-Automated tests cover discovery layouts, live add/remove scans, invalid apps, symlink deduplication, cover scoping, grid boundaries, instance locking, artwork matching, cached offline images, image validation and network backoff. Build and tests have been run on Apple silicon with macOS 26 and 27 SDKs. Runtime checks cover the native library interface, keyboard navigation, settings, launch/return handling with a test app, duplicate-copy rejection, and restarting after a simulated crash.
+Automated tests cover discovery layouts, live add/remove scans, invalid apps, symlink deduplication, cover scoping, grid boundaries, instance locking, artwork matching, cached offline images, image validation and network backoff. Build and tests have been run on Apple silicon with macOS 26 and 27 SDKs. Runtime checks cover the native library interface, keyboard navigation, settings, broken-installation diagnostics and repairs, launch/return handling with a test app, duplicate-copy rejection, and restarting after a simulated crash. Desktop checks also cover native save-folder selection, iCloud upload status, local working saves, verified publishing after exit, backup restore with a pre-restore backup, and a complete launcher update with automatic relaunch and preserved preferences.
 
-Physical controller reconnection, the background return-home chord and login startup still need hands-on validation. This first release is an early preview.
+The background return-home chord has passed a physical-controller test, with controller disconnect/reconnection observed. The restore flow was exercised with keyboard and native controls; a complete controller-only restore walkthrough, cross-Mac cloud download propagation and login startup have not been separately validated. This remains an early preview.
 
 ## Contributing
 
