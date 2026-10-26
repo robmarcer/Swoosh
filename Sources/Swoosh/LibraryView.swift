@@ -39,18 +39,25 @@ struct LibraryView: View {
                     if model.games.isEmpty { emptyLibrary.frame(maxWidth: .infinity, maxHeight: .infinity) }
                     else {
                         ScrollViewReader { proxy in
-                            ScrollView {
-                                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 20), count: columns), spacing: 24) {
-                                    ForEach(model.games) { game in
-                                        GameTile(game: game, selected: game.id == model.selected?.id, updateAvailable: model.versionStatus(for: game) == .updateAvailable, latest: model.latestRelease(for: game)) {
-                                            if model.selectedID == game.id { model.launchSelected() }
-                                            else { model.selectedID = game.id }
-                                        }.id(game.id)
-                                    }
-                                }.padding(6)
-                            }
-                            .onChange(of: model.selectedID) { _, id in
-                                if let id { withAnimation(.easeOut(duration: 0.15)) { proxy.scrollTo(id) } }
+                            GeometryReader { viewport in
+                                let tileWidth = (viewport.size.width - 12 - CGFloat(columns - 1) * 20) / CGFloat(columns)
+                                let tileHeight = max(0, min((tileWidth - 16) / 0.85 + 104, viewport.size.height - 12))
+                                ScrollView {
+                                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 20), count: columns), spacing: 24) {
+                                        ForEach(model.games) { game in
+                                            GameTile(game: game, selected: game.id == model.selected?.id, updateAvailable: model.versionStatus(for: game) == .updateAvailable, latest: model.latestRelease(for: game), height: tileHeight) {
+                                                if model.selectedID == game.id { model.launchSelected() }
+                                                else { model.selectedID = game.id }
+                                            }.id(game.id)
+                                        }
+                                    }.padding(6)
+                                }
+                                .onChange(of: model.selectedID) { _, id in
+                                    if let id { withAnimation(.easeOut(duration: 0.15)) { proxy.scrollTo(id, anchor: .center) } }
+                                }
+                                .onChange(of: viewport.size) { _, _ in
+                                    if let id = model.selected?.id { proxy.scrollTo(id, anchor: .center) }
+                                }
                             }
                         }
                     }
@@ -316,6 +323,7 @@ private struct GameTile: View {
     let selected: Bool
     let updateAvailable: Bool
     let latest: GameRelease?
+    let height: CGFloat
     let action: () -> Void
     var body: some View {
         Button(action: action) {
@@ -329,29 +337,45 @@ private struct GameTile: View {
                     } else {
                         VStack(alignment: .leading, spacing: 18) {
                             Image(systemName: "sparkles").font(.system(size: 30, weight: .light)).foregroundStyle(Palette.accent)
-                            Spacer()
-                            Text(game.name).font(.system(size: 29, weight: .medium, design: .rounded)).tracking(-0.7).multilineTextAlignment(.leading).lineLimit(4)
-                        }.padding(24)
+                            if height >= 260 { Spacer(minLength: 0) }
+                            if height >= 260 { Text(game.name).font(.system(size: 29, weight: .medium, design: .rounded)).tracking(-0.7).multilineTextAlignment(.leading).lineLimit(4) }
+                        }.padding(height >= 260 ? 24 : 16)
                     }
-                }.aspectRatio(0.85, contentMode: .fit).clipShape(RoundedRectangle(cornerRadius: 16))
+                }.frame(maxWidth: .infinity, maxHeight: .infinity).clipped().clipShape(RoundedRectangle(cornerRadius: 16))
                     .overlay(alignment: .topTrailing) {
                         if updateAvailable {
-                            Label("Update available", systemImage: "arrow.down.circle.fill")
-                                .font(.system(size: 12, weight: .semibold)).padding(.horizontal, 12).padding(.vertical, 9)
-                                .foregroundStyle(Palette.background)
-                                .background(Color(red: 1, green: 0.78, blue: 0.35), in: Capsule()).padding(12)
+                            Group {
+                                if height < 260 { Image(systemName: "arrow.down.circle.fill") }
+                                else { Label("Update available", systemImage: "arrow.down.circle.fill") }
+                            }
+                            .font(.system(size: 12, weight: .semibold))
+                            .padding(.horizontal, height < 260 ? 8 : 12).padding(.vertical, height < 260 ? 8 : 9)
+                            .foregroundStyle(Palette.background)
+                            .background(Color(red: 1, green: 0.78, blue: 0.35), in: Capsule()).padding(height < 260 ? 8 : 12)
+                            .accessibilityLabel("Update available")
                         }
                     }
-                if !game.canLaunch { Label("Check setup", systemImage: "exclamationmark.triangle.fill").font(.system(size: 12, weight: .semibold)).foregroundStyle(.orange) }
-                Text(game.name).font(.system(size: 15, weight: selected ? .semibold : .regular)).lineLimit(2).multilineTextAlignment(.leading)
-                if let installed = game.installedVersion {
-                    HStack(spacing: 8) {
-                        Text("Installed \(installed.label)")
-                        Text("→")
-                        Text(latest.map { "Latest \($0.label)" } ?? "Latest unknown")
-                    }.font(.system(size: 12)).foregroundStyle(Palette.muted)
-                }
+                    .overlay(alignment: .bottomLeading) {
+                        if !game.canLaunch {
+                            Label("Check setup", systemImage: "exclamationmark.triangle.fill")
+                                .font(.system(size: 12, weight: .semibold)).foregroundStyle(.orange)
+                                .padding(8).background(Palette.background.opacity(0.9), in: Capsule()).padding(8)
+                        }
+                    }
+                Text(game.name).font(.system(size: 15, weight: selected ? .semibold : .regular)).lineLimit(2).multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
+                    .frame(height: 36, alignment: .topLeading)
+                Group {
+                    if let installed = game.installedVersion {
+                        HStack(spacing: 8) {
+                            Text("Installed \(installed.label)")
+                            Text("→")
+                            Text(latest.map { "Latest \($0.label)" } ?? "Latest unknown")
+                        }
+                    } else { Text("Version unavailable") }
+                }.font(.system(size: 12)).foregroundStyle(Palette.muted).lineLimit(2)
+                    .frame(height: 28, alignment: .topLeading)
             }
+            .frame(height: max(0, height - 16))
             .padding(8)
             .background(selected ? Palette.accent.opacity(0.08) : Color.clear, in: RoundedRectangle(cornerRadius: 23))
             .overlay(RoundedRectangle(cornerRadius: 23).strokeBorder(selected ? Palette.accent : Color.clear, lineWidth: 3))

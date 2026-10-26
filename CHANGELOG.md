@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.5
+
+- Keep the complete selected-game outline visible by fitting cards to the library viewport.
+- Centre the selected card when browsing or resizing between two-, three- and four-column layouts.
+- Reserve room for two-line titles and version labels, with compact badges in shorter windows.
+
 ## 0.7.4
 
 - Adopt the standard MIT License, allowing free use, forks, modification, redistribution and commercial use, including sales of original or modified software.
