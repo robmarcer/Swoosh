@@ -23,7 +23,10 @@ import SwooshCore
     @Published var restoreFocused = false
     @Published var saving = false
     @Published var saveMessage = ""
-    private let saveStore = SaveStore()
+    private let saveStore: SaveStore
+    private let savePreferences: UserDefaults
+    @Published var saveLocation: URL
+    @Published var choosingSaveLocation = false
     private var managedTitleID: String?
     @Published var games: [Game] = []
     @Published var selectedID: String?
@@ -64,7 +67,12 @@ import SwooshCore
 
     private let backgroundServices: Bool
 
-    init(library: URL? = nil, backgroundServices: Bool = true) {
+    init(library: URL? = nil, backgroundServices: Bool = true, savePreferences: UserDefaults = .standard) {
+        self.savePreferences = savePreferences
+        let preference = SaveLocationPreference.load(savePreferences)
+        let location = preference?.resolve() ?? SaveStore.defaultRoot
+        self.saveLocation = location
+        self.saveStore = SaveStore(root: location, sessionRoot: preference == nil ? nil : SaveStore.localSessions, requiresExistingRoot: preference != nil)
         self.backgroundServices = backgroundServices
         // Override is for development / testing; the installed app defaults to the agreed folder.
         folder = library ?? ProcessInfo.processInfo.environment["SWOOSH_LIBRARY"].map { URL(fileURLWithPath: $0) }
@@ -178,7 +186,7 @@ import SwooshCore
     }
 
     func move(_ direction: Direction) {
-        if saving || updatingLauncher { return }
+        if saving || updatingLauncher || choosingSaveLocation { return }
         if showingUpdate { installFocused = direction == .right; return }
         if restoreCandidate != nil { restoreFocused = direction == .right; return }
         if showingSaves {
@@ -198,7 +206,7 @@ import SwooshCore
             return
         }
         if showingSettings {
-            if direction == .down { settingsFocus = min(6, settingsFocus + 1) }
+            if direction == .down { settingsFocus = min(7, settingsFocus + 1) }
             if direction == .up { settingsFocus = max(0, settingsFocus - 1) }
             return
         }
@@ -208,7 +216,7 @@ import SwooshCore
     }
 
     func confirm() {
-        guard !saving, !updatingLauncher else { return }
+        guard !saving, !updatingLauncher, !choosingSaveLocation else { return }
         if issue != nil { issue = nil; return }
         if showingUpdate {
             if installFocused { installLauncherUpdate() } else { showingUpdate = false }
@@ -245,9 +253,10 @@ import SwooshCore
             case 0: setFullscreen(!fullscreen)
             case 1: toggleLogin()
             case 2: toggleArtwork()
-            case 3: checkLauncherUpdates(force: true)
-            case 4: togglePrereleases()
-            case 5: reviewLauncherUpdate()
+            case 3: chooseSaveLocation()
+            case 4: checkLauncherUpdates(force: true)
+            case 5: togglePrereleases()
+            case 6: reviewLauncherUpdate()
             default: showingSettings = false
             }
             return
@@ -261,7 +270,7 @@ import SwooshCore
     }
 
     func back() {
-        guard !saving, !updatingLauncher else { return }
+        guard !saving, !updatingLauncher, !choosingSaveLocation else { return }
         if issue != nil { issue = nil }
         else if showingUpdate { showingUpdate = false }
         else if restoreCandidate != nil { restoreCandidate = nil }
@@ -274,12 +283,12 @@ import SwooshCore
     }
 
     func openSetup() {
-        guard !launching, !saving, !showingSaves, !showingUpdate, !updatingLauncher, !showingHome, !showingQuit, !showingSettings else { return }
+        guard !launching, !saving, !choosingSaveLocation, !showingSaves, !showingUpdate, !updatingLauncher, !showingHome, !showingQuit, !showingSettings else { return }
         showingSetup.toggle(); setupFocus = 0
     }
 
     func openSettings() {
-        guard running == nil, !launching, !saving, !updatingLauncher else { return }
+        guard running == nil, !launching, !saving, !updatingLauncher, !choosingSaveLocation else { return }
         showingSettings.toggle(); settingsFocus = 0
     }
 
@@ -289,7 +298,7 @@ import SwooshCore
 
     func launchSelected() {
         guard !games.contains(where: { activeGamePaths.contains($0.url.resolvingSymlinksInPath().path) }) else { issue = "Exit the running game before starting another."; return }
-        guard let game = selected, running == nil, !launching, !saving, !updatingLauncher else { return }
+        guard let game = selected, running == nil, !launching, !saving, !updatingLauncher, !choosingSaveLocation else { return }
         guard game.canLaunch else { showingSetup = true; setupFocus = 0; return }
         launching = true; runningName = game.name; issue = nil
         Task { @MainActor [weak self] in
@@ -330,7 +339,7 @@ import SwooshCore
     }
 
     func openSaves() {
-        guard running == nil, !launching, !saving, !updatingLauncher else { issue = "Exit the running game before managing saves."; return }
+        guard running == nil, !launching, !saving, !updatingLauncher, !choosingSaveLocation else { issue = "Exit the running game before managing saves."; return }
         saveGame = selected
         showingSaves = true; saveFocus = 0; saveSummary = nil
         guard let game = selected, let id = game.installedVersion?.titleID else {
@@ -412,6 +421,55 @@ import SwooshCore
         }
     }
 
+    func chooseSaveLocation() {
+        guard canChangeSaveLocation else { return }
+        let panel = NSOpenPanel()
+        panel.title = "Save storage location"
+        panel.message = "Choose a folder on this Mac or in iCloud Drive. Swoosh will create a Swoosh Saves folder inside it and copy existing saves and backups there. Originals are retained."
+        panel.prompt = "Use folder"
+        panel.canChooseFiles = false; panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false; panel.canCreateDirectories = true
+        panel.directoryURL = saveLocation.deletingLastPathComponent()
+        choosingSaveLocation = true
+        panel.begin { [weak self] response in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.choosingSaveLocation = false
+                if response == .OK, let selected = panel.url { self.changeSaveLocation(selected: selected) }
+            }
+        }
+    }
+
+    private var canChangeSaveLocation: Bool {
+        guard running == nil, !launching, !saving, !updatingLauncher, !choosingSaveLocation,
+              !games.contains(where: { activeGamePaths.contains($0.url.resolvingSymlinksInPath().path) }) else {
+            issue = "Exit the game and wait for save operations to finish before changing the save folder."
+            return false
+        }
+        return true
+    }
+
+    func changeSaveLocation(selected: URL) {
+        guard canChangeSaveLocation else { return }
+        do {
+            let preference = try SaveLocationPreference(selected: selected)
+            let data = try JSONEncoder().encode(preference)
+            let destination = preference.resolve()
+            saving = true
+            Task { @MainActor in
+                defer { self.saving = false }
+                do {
+                    try await self.saveStore.changeLocation(to: destination, sessionRoot: SaveStore.localSessions,
+                        activeApps: self.activeGamePaths, forbiddenRoots: [self.folder, Bundle.main.bundleURL])
+                    self.savePreferences.set(data, forKey: SaveLocationPreference.key)
+                    self.saveLocation = destination
+                    self.saveSummary = nil
+                    self.launcherUpdateMessage = "Save location changed. Existing saves and backups were verified; originals are retained."
+                } catch { self.issue = "Could not change the save location. " + error.localizedDescription }
+            }
+        } catch { issue = "Could not remember the selected folder. " + error.localizedDescription }
+    }
+
     func checkLauncherUpdates(force: Bool = false) {
         guard !checkingLauncher, !updatingLauncher, force || Date() >= nextLauncherCheck else { return }
         checkingLauncher = true; launcherUpdateMessage = "Checking launcher releases…"
@@ -434,14 +492,14 @@ import SwooshCore
 
     func reviewLauncherUpdate() {
         guard !games.contains(where: { activeGamePaths.contains($0.url.resolvingSymlinksInPath().path) }) else { issue = "Exit the running game before updating Swoosh."; return }
-        guard running == nil, !launching, !saving, !updatingLauncher else { issue = "Exit the running game before updating Swoosh."; return }
+        guard running == nil, !launching, !saving, !updatingLauncher, !choosingSaveLocation else { issue = "Exit the running game before updating Swoosh."; return }
         guard launcherRelease != nil else { checkLauncherUpdates(force: true); return }
         installFocused = false; showingUpdate = true
     }
 
     func installLauncherUpdate() {
         guard !games.contains(where: { activeGamePaths.contains($0.url.resolvingSymlinksInPath().path) }) else { issue = "Exit the running game before updating Swoosh."; return }
-        guard running == nil, !launching, !saving, !updatingLauncher, let release = launcherRelease else { return }
+        guard running == nil, !launching, !saving, !updatingLauncher, !choosingSaveLocation, let release = launcherRelease else { return }
         let installed = Bundle.main.bundleURL
         guard installed.pathExtension == "app" else { issue = "Install a packaged Swoosh app before using automatic updates."; return }
         updatingLauncher = true; showingUpdate = false

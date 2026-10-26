@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.0
+
+- Choose save storage in Settings, including a folder in iCloud Drive or on an external disk.
+- Remember the chosen folder with a bookmark and verify migrations while retaining originals.
+- Use local working saves for custom locations, then publish committed progress after exit with conflict checks.
+- Keep session journals local, recover interrupted sessions, and block unavailable or undownloaded storage instead of creating empty replacements.
+
 ## 0.6.0
 
 - Reattach running library games after launcher restarts so saves and updates stay protected.

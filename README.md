@@ -72,7 +72,7 @@ Save management is opt-in per game because a launcher cannot safely infer arbitr
 
 `path` explicitly identifies the existing save directory for migration. It can be absolute, start with `~/`, or be relative to the per-game manifest. The source folder must exist for the first migration; create an empty save folder explicitly for a new game. Do not point it at a game-data root or unrelated folder. A verified title ID is required; names are display labels, never save identities.
 
-Swoosh copies and verifies the existing saves, keeping the originals, then stores authoritative saves in `~/Library/Application Support/Swoosh/Saves/<titleID>/live/`. Updates, moves, removal and reinstallation of game files do not remove these saves. Reinstalling the same verified title reconnects them. Existing managed saves take precedence over a reinstalled game's initial saves; originals and conflicting copies remain recoverable.
+Swoosh copies and verifies the existing saves, keeping the originals, then stores authoritative saves in `<save folder>/<titleID>/live/`. The default save folder is `~/Library/Application Support/Swoosh/Saves/`. Updates, moves, removal and reinstallation of game files do not remove these saves. Reinstalling the same verified title reconnects them. Existing managed saves take precedence over a reinstalled game's initial saves; originals and conflicting copies remain recoverable.
 
 **Environment mode requires the app wrapper to honor the supplied variable.** For NXnative, Swoosh supplies `DM_SAVE` pointing to external storage. A shell wrapper must preserve an incoming value, for example `export DM_SAVE="${DM_SAVE:-$STATE_DIR/save}"`; a wrapper that unconditionally assigns DM_SAVE would bypass protection. Test the wrapper's behavior before declaring this mode. NXnative's committed `_device` companion saves are included automatically. Other runtimes can declare `companionSuffixes` explicitly.
 
@@ -128,6 +128,16 @@ Release checks download the [TitleDB version-history metadata](https://github.co
 To label the latest revision, Swoosh requests the title’s published [NXnative game profile](https://github.com/seedds/nxnative/tree/main/dm/games) from GitHub. Only an explicit `build` row matching both the title ID and exact catalogue revision is accepted. This optional lookup sends the title ID in a public profile URL; no local paths, game files, keys or saves are sent. Verified labels are cached under `Versions/Labels/` for offline use. Missing mappings are cached for a day and failures are throttled.
 
 **Latest known** means the installed revision matches this community catalogue, not a guarantee that Nintendo has published nothing newer. Cached data is identified when over a day old. Newer local builds are never marked outdated. If no exact display label is available, **Latest revision …** shows the numeric content version instead of a guessed marketing version. Updating a game still requires a compatible converted build; Swoosh does not download or install game updates.
+
+## Choosing a save folder
+
+Use **Settings → Choose save folder…** to pick a directory on the Mac, an external disk or in iCloud Drive. The native macOS folder picker uses keyboard and mouse. Swoosh creates **Swoosh Saves** inside the chosen directory, or reuses that directory when it is already named Swoosh Saves. The current path is shown in Settings and remembered using a folder bookmark, including after a folder rename.
+
+Swoosh first recovers pending sessions, copies and verifies existing saves and backups, and switches locations only after migration succeeds. The original location is retained. A conflicting title in the destination blocks migration without replacing either copy; an empty installation can reconnect an existing save folder. Storage inside the game library, nested storage roots and changes while a game is running are blocked.
+
+For a custom location, games use a local working copy under `~/Library/Application Support/Swoosh/SaveSessions/<titleID>/`. Committed saves are verified and copied back after exit. Session journals stay local; uncommitted runtime work is not published. On a crash, recovery happens before another launch. If the stored copy changed during play, both versions are retained and launch is blocked for manual conflict resolution. Backups remain in the chosen folder.
+
+For iCloud Drive, use Finder's [Download Now / Keep Downloaded controls](https://support.apple.com/en-gb/guide/mac-help/mchl1a02d711/mac) and allow sync to finish before playing on another Mac. Swoosh coordinates storage access with macOS, requests downloads for evicted files, and blocks operations on undownloaded, conflicting or unavailable storage. It does not silently fall back to empty local saves. iCloud controls upload timing; play on one Mac at a time. Other sync providers must keep the folder locally readable and writable. Live iCloud synchronization and the native picker still require hands-on validation.
 
 ## Launcher updates
 

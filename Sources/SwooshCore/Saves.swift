@@ -44,14 +44,16 @@ public struct SaveConfiguration: Codable, Equatable, Sendable {
 }
 
 public enum SaveError: LocalizedError {
-    case invalidConfiguration, missingIdentity, unsafeTree, activeSession, conflict, invalidBackup
+    case invalidConfiguration, missingIdentity, unsafeTree, activeSession, conflict, invalidBackup, storageUnavailable, locationConflict
     public var errorDescription: String? {
         switch self {
+        case .storageUnavailable: return "The selected save folder is unavailable or not downloaded. Reconnect its drive, or use Download Now / Keep Downloaded in Finder, then try again. Existing saves remain protected."
+        case .locationConflict: return "That folder contains different saves for the same title. Choose another folder; neither copy has been overwritten."
         case .invalidConfiguration: return "Save configuration is invalid. Set an explicit save folder and supported runtime environment variable in SwooshGame.json."
         case .missingIdentity: return "A verified title ID is required before Swoosh can manage saves. Add verified title metadata to SwooshGame.json."
         case .unsafeTree: return "The save folder contains a symlink, special file, or unsafe location. No saves were overwritten."
         case .activeSession: return "A previous game session is still running. Exit it before preparing or restoring saves."
-        case .conflict: return "External saves changed during an interrupted session. Both copies are preserved; inspect the recovery folder before resolving the conflict."
+        case .conflict: return "External saves changed during an interrupted session. Both copies are preserved. Inspect the Recovery folder in the save location or in Swoosh/SaveSessions under Application Support before resolving the conflict."
         case .invalidBackup: return "The backup failed verification. Existing saves have not been replaced."
         }
     }
@@ -80,11 +82,104 @@ private struct SaveJournal: Codable {
 
 /// All mutations are serialized. Snapshots are verified before atomic directory swaps.
 public actor SaveStore {
-    public let root: URL
+    public private(set) var root: URL
+    private var sessionRoot: URL?
+    private var requiresExistingRoot: Bool
+    public static var defaultRoot: URL { FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Swoosh/Saves") }
+    public static var localSessions: URL { FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Swoosh/SaveSessions") }
     private let fm = FileManager.default
-    public init(root: URL? = nil) {
-        self.root = root ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Swoosh/Saves")
+    public init(root: URL? = nil, sessionRoot: URL? = nil, requiresExistingRoot: Bool = false) {
+        self.root = root ?? Self.defaultRoot
+        self.sessionRoot = sessionRoot
+        self.requiresExistingRoot = requiresExistingRoot
     }
+
+    private func coordinated<T>(_ operation: () throws -> T) throws -> T {
+        if requiresExistingRoot {
+            var directory: ObjCBool = false
+            guard fm.fileExists(atPath: root.path, isDirectory: &directory), directory.boolValue else { throw SaveError.storageUnavailable }
+            try requireDownloaded(root)
+        } else { try fm.createDirectory(at: root, withIntermediateDirectories: true) }
+        var coordinationError: NSError?
+        var result: Result<T, Error>?
+        NSFileCoordinator().coordinate(writingItemAt: root, options: .forMerging, error: &coordinationError) { _ in
+            result = Result { try operation() }
+        }
+        if let coordinationError { throw coordinationError }
+        guard let result else { throw SaveError.storageUnavailable }
+        return try result.get()
+    }
+
+    private func requireDownloaded(_ url: URL) throws {
+        let values = try url.resourceValues(forKeys: [.isUbiquitousItemKey, .ubiquitousItemDownloadingStatusKey, .ubiquitousItemHasUnresolvedConflictsKey])
+        if values.ubiquitousItemHasUnresolvedConflicts == true { throw SaveError.locationConflict }
+        if values.isUbiquitousItem == true, let status = values.ubiquitousItemDownloadingStatus, status != .current {
+            try? fm.startDownloadingUbiquitousItem(at: url)
+            throw SaveError.storageUnavailable
+        }
+    }
+    private func sessionDirectory(_ titleID: String) throws -> URL {
+        guard let sessionRoot else { return try directory(titleID) }
+        let url = sessionRoot.appendingPathComponent(titleID.uppercased())
+        try fm.createDirectory(at: url, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        return url
+    }
+
+    /// The selected directory is dedicated to Swoosh. Existing, identical title folders can be re-used.
+    /// Original storage is retained after a successful migration.
+    public func changeLocation(to destination: URL, sessionRoot newSessions: URL?, activeApps: Set<String> = [], forbiddenRoots: [URL] = []) throws {
+        let target = destination.resolvingSymlinksInPath().standardizedFileURL
+        let origin = root.resolvingSymlinksInPath().standardizedFileURL
+        if target == origin { return }
+        guard !target.path.hasPrefix(origin.path + "/"), !origin.path.hasPrefix(target.path + "/"),
+              target != fm.homeDirectoryForCurrentUser, target.path != "/",
+              !forbiddenRoots.contains(where: { target.path == $0.resolvingSymlinksInPath().path || target.path.hasPrefix($0.resolvingSymlinksInPath().path + "/") }),
+              newSessions.map({ !target.path.hasPrefix($0.path + "/") && !$0.path.hasPrefix(target.path + "/") && target != $0 }) ?? true else { throw SaveError.unsafeTree }
+        try coordinated {
+            let sourceEntries = try fm.contentsOfDirectory(at: origin, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles])
+            for entry in sourceEntries {
+                guard InstalledGameVersion.validTitleID(entry.lastPathComponent) else { throw SaveError.unsafeTree }
+                try _recover(titleID: entry.lastPathComponent, activeApps: activeApps)
+            }
+            if let sessionRoot, let sessions = try? fm.contentsOfDirectory(at: sessionRoot, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]) {
+                for session in sessions where fm.fileExists(atPath: session.appendingPathComponent("session.json").path) {
+                    try _recover(titleID: session.lastPathComponent, activeApps: activeApps)
+                }
+            }
+            try fm.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+            var coordinationError: NSError?
+            var result: Result<Void, Error>?
+            NSFileCoordinator().coordinate(writingItemAt: target, options: .forMerging, error: &coordinationError) { _ in
+                result = Result {
+                    let before = try tree(origin).0
+                    let existed = fm.fileExists(atPath: target.path)
+                    if existed { try requireDownloaded(target) }
+                    let destinationBefore = existed ? try tree(target).0 : nil
+                    let staged = target.deletingLastPathComponent().appendingPathComponent(".swoosh-location-" + UUID().uuidString)
+                    defer { try? fm.removeItem(at: staged) }
+                    if existed { try checkedCopy(target, to: staged) }
+                    else { try fm.createDirectory(at: staged, withIntermediateDirectories: true) }
+                    let entries = try fm.contentsOfDirectory(at: staged, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles])
+                    guard entries.allSatisfy({ InstalledGameVersion.validTitleID($0.lastPathComponent) && !fm.fileExists(atPath: $0.appendingPathComponent("session.json").path) }), Set(entries.map { $0.lastPathComponent.uppercased() }).count == entries.count else { throw SaveError.locationConflict }
+                    for entry in sourceEntries {
+                        let next = staged.appendingPathComponent(entry.lastPathComponent)
+                        if fm.fileExists(atPath: next.path) {
+                            guard try tree(entry).0 == tree(next).0 else { throw SaveError.locationConflict }
+                        } else { try checkedCopy(entry, to: next) }
+                    }
+                    guard try tree(origin).0 == before else { throw SaveError.conflict }
+                    if existed { guard try tree(target).0 == destinationBefore else { throw SaveError.locationConflict } }
+                    else { guard !fm.fileExists(atPath: target.path) else { throw SaveError.locationConflict } }
+                    try install(staged, at: target)
+                }
+            }
+            if let coordinationError { throw coordinationError }
+            guard let result else { throw SaveError.storageUnavailable }
+            try result.get()
+        }
+        root = target; sessionRoot = newSessions; requiresExistingRoot = true
+    }
+
     private func directory(_ titleID: String) throws -> URL {
         guard InstalledGameVersion.validTitleID(titleID) else { throw SaveError.missingIdentity }
         let url = root.appendingPathComponent(titleID.uppercased())
@@ -95,6 +190,7 @@ public actor SaveStore {
     private func write<T: Encodable>(_ value: T, _ url: URL) throws { try JSONEncoder().encode(value).write(to: url, options: .atomic) }
     private func tree(_ directory: URL) throws -> (String, Int64) {
         let directory = directory.resolvingSymlinksInPath().standardizedFileURL
+        try requireDownloaded(directory)
         var hash = SHA256(); var bytes: Int64 = 0
         var enumerationFailed = false
         guard let enumerator = fm.enumerator(at: directory, includingPropertiesForKeys: [.isSymbolicLinkKey, .isRegularFileKey, .isDirectoryKey], errorHandler: { _, _ in enumerationFailed = true; return false }) else { throw SaveError.unsafeTree }
@@ -102,6 +198,7 @@ public actor SaveStore {
         while let url = enumerator.nextObject() as? URL { urls.append(url) }
         guard !enumerationFailed else { throw SaveError.unsafeTree }
         for url in urls.sorted(by: { $0.path < $1.path }) {
+            try requireDownloaded(url)
             let values = try url.resourceValues(forKeys: [.isSymbolicLinkKey, .isRegularFileKey, .isDirectoryKey])
             guard values.isSymbolicLink != true, values.isRegularFile == true || values.isDirectory == true else { throw SaveError.unsafeTree }
             let relative = String(url.resolvingSymlinksInPath().standardizedFileURL.path.dropFirst(directory.path.count))
@@ -156,13 +253,32 @@ public actor SaveStore {
         }
     }
     public func prepare(titleID: String, app: URL, config: SaveConfiguration, activeApps: Set<String> = []) throws -> [String: String] {
+        try coordinated { try _prepare(titleID: titleID, app: app, config: config, activeApps: activeApps) }
+    }
+    public func recover(titleID: String, activeApps: Set<String> = []) throws {
+        try coordinated { try _recover(titleID: titleID, activeApps: activeApps) }
+    }
+    @discardableResult public func backup(titleID: String, reason: String) throws -> SaveBackup {
+        try coordinated { try _backup(titleID: titleID, reason: reason) }
+    }
+    public func summary(titleID: String) throws -> SaveSummary {
+        try coordinated { try _summary(titleID: titleID) }
+    }
+    public func setRetention(titleID: String, count: Int) throws {
+        try coordinated { try _setRetention(titleID: titleID, count: count) }
+    }
+    public func restore(titleID: String, backupID: String, activeApps: Set<String> = []) throws {
+        try coordinated { try _restore(titleID: titleID, backupID: backupID, activeApps: activeApps) }
+    }
+
+    private func _prepare(titleID: String, app: URL, config: SaveConfiguration, activeApps: Set<String> = []) throws -> [String: String] {
         try config.validate()
         guard !activeApps.contains(app.resolvingSymlinksInPath().path) else { throw SaveError.activeSession }
         let dir = try directory(titleID)
         let source = try config.source(beside: app)
         let rootPath = root.resolvingSymlinksInPath().path
         guard !source.path.hasPrefix(rootPath + "/"), !rootPath.hasPrefix(source.path + "/"), source.path != rootPath else { throw SaveError.unsafeTree }
-        try recover(titleID: titleID, activeApps: activeApps)
+        try _recover(titleID: titleID, activeApps: activeApps)
         let live = dir.appendingPathComponent("live")
         if !fm.fileExists(atPath: live.path) {
             guard fm.fileExists(atPath: source.path) else { throw SaveError.invalidConfiguration }
@@ -172,32 +288,50 @@ public actor SaveStore {
             try install(staged, at: live)
             // Original runtime saves remain untouched after migration.
         }
-        _ = try backup(titleID: titleID, reason: "Before launch")
+        _ = try _backup(titleID: titleID, reason: "Before launch")
         let baseline = try tree(live).0
-        let journal = dir.appendingPathComponent("session.json")
+        let session = try sessionDirectory(titleID)
+        let working = session.appendingPathComponent("live")
+        if sessionRoot != nil {
+            let staged = session.appendingPathComponent(".prepare-" + UUID().uuidString)
+            try checkedCopy(live, to: staged)
+            try install(staged, at: working)
+        }
+        let journal = session.appendingPathComponent("session.json")
         var entry = SaveJournal(appPath: app.resolvingSymlinksInPath().path, config: config, sourcePath: source.path, baseline: baseline, ready: false)
         try write(entry, journal)
         if config.mode == .copy {
             let old = dir.appendingPathComponent("Recovery", isDirectory: true).appendingPathComponent(UUID().uuidString)
             try capture(source: source, config: config, to: old)
             if try tree(old).0 == tree(live).0 { try fm.removeItem(at: old) }
-            try deploy(live, source: source, config: config)
+            try deploy(working, source: source, config: config)
         }
         entry.ready = true; try write(entry, journal)
-        if config.mode == .environment { return [config.environmentVariable!: live.appendingPathComponent("save").path] }
+        if config.mode == .environment { return [config.environmentVariable!: working.appendingPathComponent("save").path] }
         return [:]
     }
-    public func recover(titleID: String, activeApps: Set<String> = []) throws {
-        let dir = try directory(titleID), journal = dir.appendingPathComponent("session.json")
+    private func _recover(titleID: String, activeApps: Set<String> = []) throws {
+        let dir = try directory(titleID), session = try sessionDirectory(titleID)
+        let journal = session.appendingPathComponent("session.json")
         guard fm.fileExists(atPath: journal.path) else { return }
         let entry = try read(SaveJournal.self, journal)
         guard !activeApps.contains(entry.appPath) else { throw SaveError.activeSession }
         let live = dir.appendingPathComponent("live")
-        if entry.config.mode == .copy, entry.ready {
-            guard fm.fileExists(atPath: entry.sourcePath) else { throw SaveError.conflict }
-            let recovered = dir.appendingPathComponent("Recovery/" + UUID().uuidString)
-            try capture(source: URL(fileURLWithPath: entry.sourcePath), config: entry.config, to: recovered)
-            guard try tree(live).0 == entry.baseline else { throw SaveError.conflict }
+        if entry.ready, entry.config.mode == .copy || sessionRoot != nil {
+            let recovered = session.appendingPathComponent("Recovery/" + UUID().uuidString)
+            if entry.config.mode == .copy {
+                guard fm.fileExists(atPath: entry.sourcePath) else { throw SaveError.conflict }
+                try capture(source: URL(fileURLWithPath: entry.sourcePath), config: entry.config, to: recovered)
+            } else {
+                try capture(source: session.appendingPathComponent("live/save"), config: entry.config, to: recovered)
+            }
+            let currentDigest = try tree(live).0
+            if currentDigest == (try tree(recovered).0) {
+                try? fm.removeItem(at: recovered)
+                try fm.removeItem(at: journal)
+                return
+            }
+            guard currentDigest == entry.baseline else { throw SaveError.conflict }
             let staged = dir.appendingPathComponent(".sync-" + UUID().uuidString)
             try checkedCopy(recovered, to: staged)
             try install(staged, at: live)
@@ -205,7 +339,7 @@ public actor SaveStore {
         }
         try fm.removeItem(at: journal)
     }
-    @discardableResult public func backup(titleID: String, reason: String) throws -> SaveBackup {
+    @discardableResult private func _backup(titleID: String, reason: String) throws -> SaveBackup {
         let dir = try directory(titleID), live = dir.appendingPathComponent("live")
         let id = UUID().uuidString
         let backups = dir.appendingPathComponent("Backups")
@@ -220,32 +354,32 @@ public actor SaveStore {
         try prune(titleID: titleID)
         return item
     }
-    public func summary(titleID: String) throws -> SaveSummary {
+    private func _summary(titleID: String) throws -> SaveSummary {
         let dir = try directory(titleID), backups = dir.appendingPathComponent("Backups")
         let items = ((try? fm.contentsOfDirectory(at: backups, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles])) ?? []).compactMap { try? read(SaveBackup.self, $0.appendingPathComponent("backup.json")) }.sorted { $0.date > $1.date }
         let retention = (try? read(Int.self, dir.appendingPathComponent("retention.json"))) ?? 10
         return SaveSummary(location: dir, backups: items, bytes: try tree(dir).1, retention: retention)
     }
-    public func setRetention(titleID: String, count: Int) throws {
+    private func _setRetention(titleID: String, count: Int) throws {
         guard [5, 10, 20].contains(count) else { throw SaveError.invalidConfiguration }
         try write(count, try directory(titleID).appendingPathComponent("retention.json"))
         try prune(titleID: titleID)
     }
     private func prune(titleID: String) throws {
-        let summary = try summary(titleID: titleID)
+        let summary = try _summary(titleID: titleID)
         for item in summary.backups.dropFirst(summary.retention) {
             try fm.removeItem(at: summary.location.appendingPathComponent("Backups/" + item.id))
         }
     }
-    public func restore(titleID: String, backupID: String, activeApps: Set<String> = []) throws {
+    private func _restore(titleID: String, backupID: String, activeApps: Set<String> = []) throws {
         guard UUID(uuidString: backupID) != nil else { throw SaveError.invalidBackup }
-        try recover(titleID: titleID, activeApps: activeApps)
+        try _recover(titleID: titleID, activeApps: activeApps)
         let dir = try directory(titleID), folder = dir.appendingPathComponent("Backups/" + backupID)
         let metadata = try read(SaveBackup.self, folder.appendingPathComponent("backup.json"))
         guard metadata.id == backupID, try tree(folder.appendingPathComponent("data")).0 == metadata.digest else { throw SaveError.invalidBackup }
         let staged = dir.appendingPathComponent(".restore-" + UUID().uuidString)
         try checkedCopy(folder.appendingPathComponent("data"), to: staged)
-        _ = try backup(titleID: titleID, reason: "Before restore")
+        _ = try _backup(titleID: titleID, reason: "Before restore")
         try install(staged, at: dir.appendingPathComponent("live"))
     }
 }

@@ -23,6 +23,7 @@ import SwooshCore
         }
         keyboard = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard !event.modifierFlags.contains(.command), let self, let model = self.model else { return event }
+            if model.choosingSaveLocation { return event }
             switch event.keyCode {
             case 123: model.move(.left)
             case 124: model.move(.right)

@@ -83,7 +83,7 @@ struct SwooshApp: App {
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        if model.launching || model.saving || model.updatingLauncher { return .terminateCancel }
+        if model.launching || model.saving || model.updatingLauncher || model.choosingSaveLocation { return .terminateCancel }
         if model.running != nil { model.requestHome(); return .terminateCancel }
         return .terminateNow
     }
