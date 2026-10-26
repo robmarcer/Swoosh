@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.2
+
+- Keep updater rollback tests from launching mock apps under the production bundle identity.
+
+- Load the bundled icon directly into the running app’s Dock tile.
+- Refresh app registration at startup and the bundle timestamp during packaging to improve icon refresh after upgrades.
+
 ## 0.7.1
 
 - Add a native dark-and-lime Dock icon with an original flowing S mark.

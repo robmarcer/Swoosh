@@ -55,7 +55,11 @@ public enum UpdateInstaller {
         _ = try? UpdateCommand.run("/usr/bin/open", [plan.installed.path], timeout: 20)
     }
 
-    public static func finish(planURL: URL) throws {
+    public static func finish(planURL: URL, relaunch: ((URL) throws -> Void)? = nil) throws {
+        func open(_ app: URL) throws {
+            if let relaunch { try relaunch(app) }
+            else { _ = try UpdateCommand.run("/usr/bin/open", [app.path], timeout: 20) }
+        }
         let fm = FileManager.default
         let plan = try JSONDecoder().decode(UpdateInstallPlan.self, from: Data(contentsOf: planURL))
         guard plan.staged.deletingLastPathComponent() == plan.installed.deletingLastPathComponent(),
@@ -69,11 +73,11 @@ public enum UpdateInstaller {
         do {
             try UpdateValidation.validateBundle(plan.installed, expectedVersion: plan.version, installed: plan.staged)
             try JSONEncoder().encode(plan).write(to: plan.receipt, options: .atomic)
-            _ = try UpdateCommand.run("/usr/bin/open", [plan.installed.path], timeout: 20)
+            try open(plan.installed)
         } catch {
             // Roll back if verification, receipt writing or relaunch fails.
             try exchange(staged: plan.staged, installed: plan.installed)
-            _ = try? UpdateCommand.run("/usr/bin/open", [plan.installed.path], timeout: 20)
+            try? open(plan.installed)
             throw error
         }
         // Keep the previous app beside the installation until a later cleanup policy is introduced.

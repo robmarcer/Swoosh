@@ -86,7 +86,9 @@ final class UpdateInstallerTests: XCTestCase {
         let failing = UpdateInstallPlan(installed: plan.installed, staged: plan.staged, version: plan.version, parentPID: Int32.max, executableDigest: plan.executableDigest, receipt: root.appendingPathComponent("missing/receipt.json"))
         let planURL = workspace.appendingPathComponent("plan.json")
         try JSONEncoder().encode(failing).write(to: planURL)
-        XCTAssertThrowsError(try UpdateInstaller.finish(planURL: planURL))
+        var relaunched: URL?
+        XCTAssertThrowsError(try UpdateInstaller.finish(planURL: planURL, relaunch: { relaunched = $0 }))
+        XCTAssertEqual(relaunched, installed)
         XCTAssertNoThrow(try UpdateValidation.validateBundle(installed, expectedVersion: "0.1.0", installed: installed))
         let info = try Data(contentsOf: installed.appendingPathComponent("Contents/Info.plist"))
         let object = try PropertyListSerialization.propertyList(from: info, format: nil) as! [String: Any]

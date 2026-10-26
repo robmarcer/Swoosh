@@ -1,4 +1,5 @@
 import AppKit
+import CoreServices
 import SwiftUI
 import SwooshCore
 
@@ -56,6 +57,13 @@ struct SwooshApp: App {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
+        // Existing installations can retain a generic Launch Services icon after an update.
+        if Bundle.main.bundleURL.pathExtension == "app" {
+            _ = LSRegisterURL(Bundle.main.bundleURL as CFURL, true)
+            if let url = Bundle.main.url(forResource: "Swoosh", withExtension: "icns"), let icon = NSImage(contentsOf: url) {
+                NSApp.applicationIconImage = icon
+            }
+        }
         input = ControllerInput(model: model)
         homeFeedback = HomeProgressPanel(model: model)
         NSApp.activate(ignoringOtherApps: true)
