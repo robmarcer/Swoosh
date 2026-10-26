@@ -55,7 +55,7 @@ import SwooshCore
         let now = Date()
         let chord = pad.buttonMenu.isPressed && (pad.buttonOptions?.isPressed ?? false)
         let triggered = hold.update(pressed: chord, eligible: model.running != nil, now: ProcessInfo.processInfo.systemUptime)
-        model.homeProgress = hold.progress
+        if model.homeProgress != hold.progress { model.homeProgress = hold.progress }
         if triggered { armed = false; model.requestHome() }
         if chord { return }
         // Require neutral input after reconnecting or returning from a game.

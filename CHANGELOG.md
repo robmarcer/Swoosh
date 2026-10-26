@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.0
+
+- Reattach running library games after launcher restarts so saves and updates stay protected.
+
+- Show launcher release checks, installed/latest versions and release notes in Settings.
+- Support explicit preview/stable channels and authenticated private-repository downloads through GitHub CLI.
+- Verify release checksums, safe archive layout, app identity, version, arm64 architecture and signing identity.
+- Stage updates before quitting, atomically exchange app bundles, retain the previous app and roll back installation failures.
+- Keep manual updates available when authentication, connectivity or folder permissions prevent automatic installation.
+
 ## 0.5.0
 
 - Store managed saves outside game installations, keyed by verified title IDs.

@@ -101,7 +101,7 @@ Your own `cover.jpg` or `cover.png` beside an app inside its individual game fol
 
 Holding the home shortcut shows progress without taking focus from the game, then opens **Resume game**, **Return to library**, and **Quit game…**. Resume is selected by default. Return to library leaves the game running with a visible resume control; another game cannot start until it exits. Quit opens a second confirmation with **Keep playing** selected by default. Save in the game before quitting. Swoosh sends a normal macOS quit request and never force-kills a game. The home chord requires a controller exposing both Menu and Options/View buttons; the foreground game also receives those buttons.
 
-Swoosh passes `DM_FULLSCREEN=1` to launched games. NXnative builds supporting that flag start fullscreen; other apps control their own display mode. It tracks the launched application and brings the library forward when it exits. It does not distinguish normal exits from crashes or resume unsaved progress.
+Swoosh passes `DM_FULLSCREEN=1` to launched games. NXnative builds supporting that flag start fullscreen; other apps control their own display mode. It tracks the launched application, reattaches already-running library apps after a launcher restart, and brings the library forward when a tracked game exits. It does not distinguish normal exits from crashes or resume unsaved progress.
 
 Settings provide fullscreen, automatic artwork downloads and opt-in launch at login. Login startup requires a packaged application installed at a stable location, such as Applications. Any macOS approval remains in System Settings; Swoosh does not change login or disk-encryption settings.
 
@@ -128,6 +128,16 @@ Release checks download the [TitleDB version-history metadata](https://github.co
 To label the latest revision, Swoosh requests the title’s published [NXnative game profile](https://github.com/seedds/nxnative/tree/main/dm/games) from GitHub. Only an explicit `build` row matching both the title ID and exact catalogue revision is accepted. This optional lookup sends the title ID in a public profile URL; no local paths, game files, keys or saves are sent. Verified labels are cached under `Versions/Labels/` for offline use. Missing mappings are cached for a day and failures are throttled.
 
 **Latest known** means the installed revision matches this community catalogue, not a guarantee that Nintendo has published nothing newer. Cached data is identified when over a day old. Newer local builds are never marked outdated. If no exact display label is available, **Latest revision …** shows the numeric content version instead of a guessed marketing version. Updating a game still requires a compatible converted build; Swoosh does not download or install game updates.
+
+## Launcher updates
+
+Settings shows the installed launcher version, checks for a newer eligible release and lets you review its release notes before confirming installation. **Preview + stable** is the default channel during this early preview; choose **Stable only** to exclude prereleases. Swoosh never installs an equal or older version. Updates are optional and cannot run while a tracked game or save operation is active.
+
+For authenticated release access, install [GitHub CLI](https://cli.github.com/) and sign in using `gh auth login` with an account that can read the repository. Swoosh uses the existing CLI authentication and never bundles or reads out tokens. The CLI is optional for playing games; Settings always links to the release page for manual downloads. Failed or offline checks leave the library usable. The release repository is configured in the app's `SwooshReleaseRepository` plist entry.
+
+The updater downloads the matching arm64 asset and checksum file, verifies SHA-256 (including GitHub's asset digest when supplied), rejects unsafe archive paths and symlinks, and checks the extracted bundle's identity, version, minimum macOS version, architecture and signature. Current ad-hoc releases must remain validly ad-hoc signed; a Developer ID distribution must retain its signing team. Ad-hoc signing does not provide notarization or independent publisher authentication; update trust comes from authenticated access to the configured repository.
+
+After confirmation and verification, a helper waits for Swoosh to exit, atomically exchanges the app directories and reopens it. The previous app remains as a hidden `.Swoosh-update-….app` beside the installation for recovery. A failed exchange leaves the original untouched; post-exchange verification or relaunch failure triggers rollback. Metadata, downloads and receipts are kept under `~/Library/Application Support/Swoosh/Updates/`. Game files, settings and saves are outside the replaced app. A read-only or translocated installation requires a manual update; the updater never requests elevated access.
 
 ## Build
 

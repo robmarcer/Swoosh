@@ -4,6 +4,12 @@ import SwooshCore
 
 @main enum SwooshMain {
     @MainActor static func main() {
+        let arguments = CommandLine.arguments
+        if arguments.count == 3, arguments[1] == "--finish-update" {
+            do { try UpdateInstaller.finish(planURL: URL(fileURLWithPath: arguments[2])) }
+            catch { UpdateInstaller.recoverFailedPlan(URL(fileURLWithPath: arguments[2])); exit(1) }
+            return
+        }
         let lock = InstanceLock()
         switch lock.status {
         case .acquired:
@@ -77,7 +83,7 @@ struct SwooshApp: App {
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        if model.launching || model.saving { return .terminateCancel }
+        if model.launching || model.saving || model.updatingLauncher { return .terminateCancel }
         if model.running != nil { model.requestHome(); return .terminateCancel }
         return .terminateNow
     }

@@ -102,6 +102,21 @@ struct LibraryView: View {
                     }
                 }
                 if model.showingSaves { saves }
+                if model.showingUpdate, let release = model.launcherRelease {
+                    overlay(title: "Update Swoosh?", subtitle: "Installed \(model.installedLauncherVersion) → \(release.tag_name)") {
+                        VStack(spacing: 16) {
+                            ScrollView { Text(release.body ?? "No release notes provided.").frame(maxWidth: .infinity, alignment: .leading).textSelection(.enabled) }.frame(maxHeight: 240)
+                            Text("Swoosh will close and reopen. Settings, games and saves stay in place.").foregroundStyle(Palette.muted)
+                            HStack {
+                                action("Cancel", selected: !model.installFocused) { model.showingUpdate = false }
+                                action("Install update", selected: model.installFocused) { model.installLauncherUpdate() }
+                            }
+                        }
+                    }
+                }
+                if model.updatingLauncher {
+                    overlay(title: "Preparing Swoosh update", subtitle: "Downloading and verifying the new app. Your installed app stays in place until verification finishes.") { ProgressView() }
+                }
                 if model.saving { overlay(title: "Protecting your saves", subtitle: "Please wait until the operation finishes.") { ProgressView() } }
                 if let item = model.restoreCandidate {
                     overlay(title: "Restore this backup?", subtitle: item.date.formatted() + " · Current saves will be backed up before replacement.") {
@@ -230,13 +245,25 @@ struct LibraryView: View {
     }
 
     private var settings: some View {
-        overlay(title: "Make yourself at home.", subtitle: "Library settings") {
+        overlay(title: "Make yourself at home.", subtitle: "Library settings · Swoosh \(model.installedLauncherVersion)") {
             VStack(spacing: 12) {
-                action("Fullscreen     \(model.fullscreen ? "On" : "Off")", selected: model.settingsFocus == 0) { model.setFullscreen(!model.fullscreen) }
-                action("Open at login     \(model.loginEnabled ? "On" : "Off")", selected: model.settingsFocus == 1) { model.toggleLogin() }
-                action("Download artwork     \(model.artworkEnabled ? "On" : "Off")", selected: model.settingsFocus == 2) { model.toggleArtwork() }
-                action("Done", selected: model.settingsFocus == 3) { model.showingSettings = false }
-                Text(model.folder.path).font(.system(size: 12, design: .monospaced)).foregroundStyle(Palette.muted).padding(.top, 12).textSelection(.enabled)
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        VStack(spacing: 12) {
+                            action("Fullscreen     \(model.fullscreen ? "On" : "Off")", selected: model.settingsFocus == 0) { model.setFullscreen(!model.fullscreen) }.id(0)
+                            action("Open at login     \(model.loginEnabled ? "On" : "Off")", selected: model.settingsFocus == 1) { model.toggleLogin() }.id(1)
+                            action("Download artwork     \(model.artworkEnabled ? "On" : "Off")", selected: model.settingsFocus == 2) { model.toggleArtwork() }.id(2)
+                            action("Check launcher updates", selected: model.settingsFocus == 3) { model.checkLauncherUpdates(force: true) }.id(3)
+                            action("Release channel     \(model.includePrereleases ? "Preview + stable" : "Stable only")", selected: model.settingsFocus == 4) { model.togglePrereleases() }.id(4)
+                            action("Review launcher update", selected: model.settingsFocus == 5) { model.reviewLauncherUpdate() }.id(5)
+                            action("Done", selected: model.settingsFocus == 6) { model.showingSettings = false }.id(6)
+                        }
+                    }.frame(maxHeight: 320)
+                    .onChange(of: model.settingsFocus) { _, value in withAnimation { proxy.scrollTo(value) } }
+                }
+                Text(model.launcherUpdateMessage).font(.system(size: 13)).foregroundStyle(Palette.muted).multilineTextAlignment(.center)
+                Link("Download manually · GitHub releases", destination: model.releasesURL).foregroundStyle(Palette.accent)
+                Text(model.folder.path).font(.system(size: 12, design: .monospaced)).foregroundStyle(Palette.muted).padding(.top, 8).textSelection(.enabled)
                 Text("↑ ↓ Select     A Confirm     B Back").font(.system(size: 13)).foregroundStyle(Palette.muted)
             }
         }

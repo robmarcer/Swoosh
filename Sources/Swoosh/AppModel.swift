@@ -4,6 +4,18 @@ import ServiceManagement
 import SwooshCore
 
 @MainActor final class AppModel: ObservableObject {
+    @Published var launcherRelease: LauncherRelease?
+    @Published var launcherUpdateMessage = "Check for launcher updates"
+    @Published var checkingLauncher = false
+    @Published var updatingLauncher = false
+    @Published var showingUpdate = false
+    @Published var installFocused = false
+    @Published var includePrereleases = UserDefaults.standard.object(forKey: "includePrereleases") as? Bool ?? true
+    let installedLauncherVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.0.0"
+    let releaseRepository = Bundle.main.object(forInfoDictionaryKey: "SwooshReleaseRepository") as? String ?? "robmarcer/Swoosh"
+    var releasesURL: URL { URL(string: "https://github.com/" + releaseRepository + "/releases")! }
+    private var nextLauncherCheck = Date.distantPast
+    private var saveGame: Game?
     @Published var showingSaves = false
     @Published var saveSummary: SaveSummary?
     @Published var saveFocus = 0
@@ -61,6 +73,7 @@ import SwooshCore
         catch { issue = "Could not create the game folder: \(error.localizedDescription)" }
         refresh()
         guard backgroundServices else { return }
+        checkLauncherUpdates()
         timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in self?.refresh() }
         }
@@ -85,6 +98,14 @@ import SwooshCore
         if !games.contains(where: { $0.id == selectedID }) { selectedID = games.first?.id }
         if let problem = scan.issue { issue = problem }
         if running?.isTerminated == true { finishSession() }
+        if running == nil, !launching, !saving {
+            let active = NSWorkspace.shared.runningApplications
+            if let game = games.first(where: { game in active.contains { $0.bundleURL?.resolvingSymlinksInPath() == game.url.resolvingSymlinksInPath() && !$0.isTerminated } }),
+               let app = active.first(where: { $0.bundleURL?.resolvingSymlinksInPath() == game.url.resolvingSymlinksInPath() && !$0.isTerminated }) {
+                running = app; runningID = game.id; runningName = game.name; didLaunch = true
+                if (try? SaveConfiguration.read(game: game, libraryRoot: folder)) != nil { managedTitleID = game.installedVersion?.titleID }
+            }
+        }
         if backgroundServices {
             loadArtwork(for: scan.games)
             refreshVersions()
@@ -157,7 +178,8 @@ import SwooshCore
     }
 
     func move(_ direction: Direction) {
-        if saving { return }
+        if saving || updatingLauncher { return }
+        if showingUpdate { installFocused = direction == .right; return }
         if restoreCandidate != nil { restoreFocused = direction == .right; return }
         if showingSaves {
             if direction == .down { saveFocus = min((saveSummary?.backups.count ?? 0) + 1, saveFocus + 1) }
@@ -176,7 +198,7 @@ import SwooshCore
             return
         }
         if showingSettings {
-            if direction == .down { settingsFocus = min(3, settingsFocus + 1) }
+            if direction == .down { settingsFocus = min(6, settingsFocus + 1) }
             if direction == .up { settingsFocus = max(0, settingsFocus - 1) }
             return
         }
@@ -186,8 +208,12 @@ import SwooshCore
     }
 
     func confirm() {
-        guard !saving else { return }
+        guard !saving, !updatingLauncher else { return }
         if issue != nil { issue = nil; return }
+        if showingUpdate {
+            if installFocused { installLauncherUpdate() } else { showingUpdate = false }
+            return
+        }
         if let candidate = restoreCandidate {
             if restoreFocused { restoreBackup(candidate) } else { restoreCandidate = nil }
             return
@@ -219,6 +245,9 @@ import SwooshCore
             case 0: setFullscreen(!fullscreen)
             case 1: toggleLogin()
             case 2: toggleArtwork()
+            case 3: checkLauncherUpdates(force: true)
+            case 4: togglePrereleases()
+            case 5: reviewLauncherUpdate()
             default: showingSettings = false
             }
             return
@@ -232,8 +261,9 @@ import SwooshCore
     }
 
     func back() {
-        guard !saving else { return }
+        guard !saving, !updatingLauncher else { return }
         if issue != nil { issue = nil }
+        else if showingUpdate { showingUpdate = false }
         else if restoreCandidate != nil { restoreCandidate = nil }
         else if showingSaves { showingSaves = false }
         else if showingSetup { showingSetup = false }
@@ -244,12 +274,12 @@ import SwooshCore
     }
 
     func openSetup() {
-        guard !launching, !saving, !showingSaves, !showingHome, !showingQuit, !showingSettings else { return }
+        guard !launching, !saving, !showingSaves, !showingUpdate, !updatingLauncher, !showingHome, !showingQuit, !showingSettings else { return }
         showingSetup.toggle(); setupFocus = 0
     }
 
     func openSettings() {
-        guard running == nil, !launching, !saving else { return }
+        guard running == nil, !launching, !saving, !updatingLauncher else { return }
         showingSettings.toggle(); settingsFocus = 0
     }
 
@@ -258,7 +288,8 @@ import SwooshCore
     }
 
     func launchSelected() {
-        guard let game = selected, running == nil, !launching, !saving else { return }
+        guard !games.contains(where: { activeGamePaths.contains($0.url.resolvingSymlinksInPath().path) }) else { issue = "Exit the running game before starting another."; return }
+        guard let game = selected, running == nil, !launching, !saving, !updatingLauncher else { return }
         guard game.canLaunch else { showingSetup = true; setupFocus = 0; return }
         launching = true; runningName = game.name; issue = nil
         Task { @MainActor [weak self] in
@@ -299,7 +330,8 @@ import SwooshCore
     }
 
     func openSaves() {
-        guard running == nil, !launching, !saving else { issue = "Exit the running game before managing saves."; return }
+        guard running == nil, !launching, !saving, !updatingLauncher else { issue = "Exit the running game before managing saves."; return }
+        saveGame = selected
         showingSaves = true; saveFocus = 0; saveSummary = nil
         guard let game = selected, let id = game.installedVersion?.titleID else {
             saveMessage = "Add verified title metadata before managing saves."; return
@@ -320,7 +352,7 @@ import SwooshCore
     }
 
     func cycleRetention() {
-        guard !saving, let id = selected?.installedVersion?.titleID, let summary = saveSummary else { return }
+        guard !saving, let id = saveGame?.installedVersion?.titleID, let summary = saveSummary else { return }
         let count = summary.retention == 5 ? 10 : (summary.retention == 10 ? 20 : 5)
         saving = true
         Task { @MainActor in
@@ -333,8 +365,8 @@ import SwooshCore
     }
 
     func restoreBackup(_ item: SaveBackup) {
-        guard running == nil, !launching, !saving, let id = selected?.installedVersion?.titleID else { return }
-        guard let game = selected, !activeGamePaths.contains(game.url.resolvingSymlinksInPath().path) else { issue = SaveError.activeSession.localizedDescription; return }
+        guard running == nil, !launching, !saving, let id = saveGame?.installedVersion?.titleID else { return }
+        guard let game = saveGame, !activeGamePaths.contains(game.url.resolvingSymlinksInPath().path) else { issue = SaveError.activeSession.localizedDescription; return }
         saving = true; restoreCandidate = nil
         Task { @MainActor in
             defer { self.saving = false }
@@ -376,6 +408,65 @@ import SwooshCore
                 defer { self.saving = false }
                 do { try await self.saveStore.recover(titleID: id, activeApps: self.activeGamePaths) }
                 catch { self.issue = "Save recovery needs attention. " + error.localizedDescription }
+            }
+        }
+    }
+
+    func checkLauncherUpdates(force: Bool = false) {
+        guard !checkingLauncher, !updatingLauncher, force || Date() >= nextLauncherCheck else { return }
+        checkingLauncher = true; launcherUpdateMessage = "Checking launcher releases…"
+        nextLauncherCheck = Date().addingTimeInterval(force ? 60 : 86400)
+        let store = LauncherUpdateStore(repository: releaseRepository)
+        Task { @MainActor in
+            defer { self.checkingLauncher = false }
+            do {
+                self.launcherRelease = try await store.check(installed: self.installedLauncherVersion, includePrereleases: self.includePrereleases)
+                self.launcherUpdateMessage = self.launcherRelease.map { "Update available · " + $0.tag_name } ?? "No newer release on this channel"
+            } catch { self.launcherUpdateMessage = error.localizedDescription }
+        }
+    }
+
+    func togglePrereleases() {
+        guard !checkingLauncher, !updatingLauncher else { return }
+        includePrereleases.toggle(); UserDefaults.standard.set(includePrereleases, forKey: "includePrereleases")
+        launcherRelease = nil; nextLauncherCheck = .distantPast; checkLauncherUpdates(force: true)
+    }
+
+    func reviewLauncherUpdate() {
+        guard !games.contains(where: { activeGamePaths.contains($0.url.resolvingSymlinksInPath().path) }) else { issue = "Exit the running game before updating Swoosh."; return }
+        guard running == nil, !launching, !saving, !updatingLauncher else { issue = "Exit the running game before updating Swoosh."; return }
+        guard launcherRelease != nil else { checkLauncherUpdates(force: true); return }
+        installFocused = false; showingUpdate = true
+    }
+
+    func installLauncherUpdate() {
+        guard !games.contains(where: { activeGamePaths.contains($0.url.resolvingSymlinksInPath().path) }) else { issue = "Exit the running game before updating Swoosh."; return }
+        guard running == nil, !launching, !saving, !updatingLauncher, let release = launcherRelease else { return }
+        let installed = Bundle.main.bundleURL
+        guard installed.pathExtension == "app" else { issue = "Install a packaged Swoosh app before using automatic updates."; return }
+        updatingLauncher = true; showingUpdate = false
+        let store = LauncherUpdateStore(repository: releaseRepository)
+        Task { @MainActor in
+            do {
+                let workspace = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+                    .appendingPathComponent("Swoosh/Updates/" + UUID().uuidString)
+                let archive = try await store.download(release, to: workspace)
+                let plan = try await Task.detached { try UpdateInstaller.stage(archive: archive, release: release, installed: installed, workspace: workspace) }.value
+                guard self.running == nil, !self.games.contains(where: { self.activeGamePaths.contains($0.url.resolvingSymlinksInPath().path) }) else { throw SaveError.activeSession }
+                let planURL = workspace.appendingPathComponent("plan.json")
+                try JSONEncoder().encode(plan).write(to: planURL, options: .atomic)
+                try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: planURL.path)
+                // A copied helper waits for this app to exit, then exchanges app directories atomically.
+                let helper = workspace.appendingPathComponent("SwooshUpdater")
+                try FileManager.default.copyItem(at: installed.appendingPathComponent("Contents/MacOS/Swoosh"), to: helper)
+                let process = Process(); process.executableURL = helper; process.arguments = ["--finish-update", planURL.path]
+                process.standardOutput = FileHandle.nullDevice; process.standardError = FileHandle.nullDevice
+                try process.run()
+                self.updatingLauncher = false
+                NSApp.terminate(nil)
+            } catch {
+                self.updatingLauncher = false
+                self.issue = error.localizedDescription + " You can also install from the release page in Settings."
             }
         }
     }

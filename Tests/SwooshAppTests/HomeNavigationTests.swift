@@ -1,6 +1,7 @@
 import XCTest
 import AppKit
 @testable import Swoosh
+import SwooshCore
 
 final class HomeNavigationTests: XCTestCase {
     @MainActor func testHomeLibraryResumeAndSeparateQuitConfirmation() throws {
@@ -31,4 +32,23 @@ final class HomeNavigationTests: XCTestCase {
         XCTAssertFalse(model.showingHome)
         XCTAssertEqual(model.homeProgress, 0)
     }
+    @MainActor func testUpdateReviewDefaultsToCancelAndBlocksDuringGame() throws {
+        _ = NSApplication.shared
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let model = AppModel(library: folder, backgroundServices: false)
+        model.launcherRelease = try JSONDecoder().decode(LauncherRelease.self, from: Data("{\"tag_name\":\"v0.9.0\",\"draft\":false,\"prerelease\":true,\"assets\":[]}".utf8))
+        model.running = NSRunningApplication.current
+        model.reviewLauncherUpdate()
+        XCTAssertFalse(model.showingUpdate)
+        XCTAssertNotNil(model.issue)
+        model.running = nil; model.issue = nil
+        model.reviewLauncherUpdate()
+        XCTAssertTrue(model.showingUpdate)
+        XCTAssertFalse(model.installFocused)
+        model.confirm()
+        XCTAssertFalse(model.showingUpdate)
+        XCTAssertFalse(model.updatingLauncher)
+    }
+
 }
