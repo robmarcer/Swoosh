@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.4
+
+- Add the Swoosh No-Sale Licence 1.0: free use, forks and redistribution, including business use, with sales of original or modified software prohibited.
+- Document distribution, contribution and optional paid-service terms.
+- Include the licence text in packaged app bundles.
+
 ## 0.7.3
 
 - Replace the original letter mark with a dimensional mint-and-lime folded ribbon icon.

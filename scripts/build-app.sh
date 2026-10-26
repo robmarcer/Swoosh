@@ -7,6 +7,7 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp .build/release/Swoosh "$APP/Contents/MacOS/Swoosh"
 strip -S "$APP/Contents/MacOS/Swoosh"
 cp resources/Info.plist "$APP/Contents/Info.plist"
+cp LICENSE "$APP/Contents/Resources/LICENSE.txt"
 swift scripts/make-icon.swift "$PWD/build/Swoosh.iconset"
 ICON_HASH=$(shasum -a 256 resources/AppIcon.png | cut -c 1-12)
 ICON_FILE="Swoosh-$ICON_HASH.icns"

@@ -4,6 +4,12 @@ A lightweight, controller-first game launcher for Apple silicon Macs.
 
 Swoosh turns a folder of converted Switch game apps into a fullscreen library. Browse with a controller, launch a game, and return to the library when it closes. No accounts, streaming service, or online catalogue required.
 
+## Licence
+
+Swoosh is source-available under the [Swoosh No-Sale Licence 1.0](LICENSE), a custom licence. You may use it for free, including within a business, modify it, fork it and share original or modified versions for free. Selling Swoosh or modified versions, charging for downloads or software access, and removing the no-sale condition are prohibited. Optional donations and separate paid services are permitted when they are not disguised software charges.
+
+Keep the licence and copyright notices with copies, identify material changes and distinguish forks from official releases. Private changes do not have to be published. This is not an OSI-approved open-source licence. Game files, keys, firmware and external artwork are not covered by this licence.
+
 ## Requirements
 
 - An Apple silicon Mac (M-series), running macOS 14 or later.
@@ -178,5 +184,7 @@ Automated tests cover discovery layouts, live add/remove scans, invalid apps, sy
 The background return-home chord has passed a physical-controller test, with controller disconnect/reconnection observed. The restore flow was exercised with keyboard and native controls; a complete controller-only restore walkthrough, cross-Mac cloud download propagation and login startup have not been separately validated. This remains an early preview.
 
 ## Contributing
+
+Submit contributions under the Swoosh No-Sale Licence 1.0. Contributors retain their copyright; submitting a contribution does not transfer ownership.
 
 Keep game binaries, game data, keys, saves, personal paths, machine names and local setup details out of source control, screenshots, issues and release assets.
