@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.3
+
+- Replace the original letter mark with a dimensional mint-and-lime folded ribbon icon.
+- Package the selected artwork into standard and Retina Dock icon sizes.
+
 ## 0.7.2
 
 - Keep updater rollback tests from launching mock apps under the production bundle identity.

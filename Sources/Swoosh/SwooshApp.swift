@@ -60,7 +60,8 @@ struct SwooshApp: App {
         // Existing installations can retain a generic Launch Services icon after an update.
         if Bundle.main.bundleURL.pathExtension == "app" {
             _ = LSRegisterURL(Bundle.main.bundleURL as CFURL, true)
-            if let url = Bundle.main.url(forResource: "Swoosh", withExtension: "icns"), let icon = NSImage(contentsOf: url) {
+            if let name = Bundle.main.object(forInfoDictionaryKey: "CFBundleIconFile") as? String,
+               let url = Bundle.main.resourceURL?.appendingPathComponent(name), let icon = NSImage(contentsOf: url) {
                 NSApp.applicationIconImage = icon
             }
         }
